@@ -9,7 +9,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: enterprise-experts:0.2.0
+    image: enterprise-experts:0.3.0
     volumes:
       - ${PROJECT_DIR:-.}:/project:ro
       - ${REPORTS_DIR:-./reports}:/reports

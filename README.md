@@ -47,13 +47,13 @@ Target states: **Architecture Reviewed · Security Assessed · Testing Evidence-
 
 Three modes: **Full** (all 23 areas), **Quick** (8 areas), **Focused** (the areas you name; its decision covers that scope only).
 
-## Status: v0.2.0, not yet v1.0
+## Status: v0.3.0, not yet v1.0
 
-What is implemented and tested, and what is not, is tracked honestly in [docs/ROADMAP.md](docs/ROADMAP.md). In short: the decision engine, intake, evidence recording, stack detection, Docker runner and CI are implemented and covered by 76 automated tests. The 23-expert AI workflow has not yet been evaluated end to end on real projects, and several v1.0 items (remediation tooling, PDF/Excel export, update manager, dashboard) are not built.
+What is implemented and tested, and what is not, is tracked honestly in [docs/ROADMAP.md](docs/ROADMAP.md). In short: the decision engine, intake, evidence recording, stack detection, edit/command guard, before/after benchmarks, diagrams from code, delivery packaging, Docker runner and CI are implemented and covered by 101 automated tests. The 23-expert AI workflow has not yet been evaluated end to end on real projects, and several items (scanner integrations beyond detection, PDF/Excel export, signed releases, scheduled reviews, dashboard) are not built.
 
 ## Install
 
-**As a Claude Code plugin** (skill + read-only reviewer subagent):
+**As a Claude Code plugin** (skill, two read-only subagents, and the hook that enforces read-only assessment):
 
 ```
 /plugin marketplace add saradchamas/Enterprise-Experts-by-Sara

@@ -1,63 +1,67 @@
 # Roadmap to v1.0
 
-Status as of v0.2.0. "Tested" means an automated test or a recorded manual run exists; anything else is stated as not done.
+Status as of v0.3.0. "Tested" means an automated test or a recorded run exists; anything else is stated as not done.
 
-## Gap analysis against the v1.0 plan
+## What v0.3.0 covers of the two plans
 
-| Priority | Component | Status in v0.2.0 | Still missing |
-|---|---|---|---|
-| P0 | Assessment engine (strict validation, deterministic decision) | **Done, tested** (38 regression tests) | JSON Schema files for external tools |
-| P0 | Evidence engine (IDs, commands, timestamps, tool versions, commit, artifacts) | **Done, tested** | Signed hashes; today integrity detects edits but is not tamper-proof |
-| P0 | Security boundaries (read-only default, approvals, masking) | **Partly.** Command policy and masking are tested. "Do not edit the project during assessment" is an instruction to Claude, not an enforced control | Plugin hooks that block edits outside the remediation phase |
-| P0 | Automated tests | **Done:** 76 tests (unit, regression, end-to-end, interrupted runs, adversarial inputs) | Tests of the AI workflow itself (see below) |
-| P0 | Project adapters | **Done, tested** on 7 fixtures: Node/TS, Python, Go, monorepo, AI app, Terraform-only, unsupported stack. Java, PHP, Rust, Dart/Flutter, .NET, Ruby adapters exist | Fixtures for Java, PHP, Rust, Flutter, .NET, Ruby; microservice fixture |
-| P0 | Docker runtime | **Done, tested on Linux** for the deterministic engine | macOS and Windows/WSL2 runs; image scanning; digest pinning. It does not run the AI workflow or project toolchains |
-| P0 | CI quality gates | **Configured:** tests on Linux/macOS/Windows × Python 3.10/3.13, lint, Docker smoke test; actions pinned by commit; read-only token | First green run on GitHub; dependency and image vulnerability scan; SBOM |
-| P1 | 23 expert specifications | **Specified;** a test checks each has mission, deliverable and checks | Evaluation of the depth and quality of each expert's output on real projects |
-| P1 | Workflow orchestrator | **Partly:** wave ordering, state, resume are implemented and tested; a read-only `expert-reviewer` subagent exists | Token budgets and retry policy enforced in code; contradiction detection is by instruction only |
-| P1 | Remediation engine | **Instruction-level only** (plan, approval, branch, re-check). The engine enforces that `fixed` needs a re-check | Tooling for worktrees, diff review and rollback |
-| P1 | Skill/plugin manager | Not built. Companion skills are used if present and never installed automatically | Detection and version checks of companions |
-| P1 | Documentation generator | Instruction-level (expert 17) | — |
-| P1 | Release management | Changelog, version consistency test | First tagged release; release workflow |
-| P1 | Update manager | Manual, documented | Tested upgrade and rollback between two published versions |
-| P1 | Cross-platform support | Linux tested; macOS/Windows in CI matrix | Confirmed CI results |
-| P1 | Cost and resource controls | Command timeouts; intake asks for limits | Enforced token budgets |
-| P2 | Dashboard, scheduled reviews, integrations | Not built | — |
-| P2 | Exports | Markdown, JSON, HTML for the scorecard | PDF, Excel; HTML for the full report |
+| Area of the plan | Status | Evidence / what is missing |
+|---|---|---|
+| Strict scoring, fail-closed decision, risk gates | **Done, tested** | `tests/test_scoring.py` (38 tests) |
+| Evidence engine (IDs, commands, timestamps, versions, commit, hashes) | **Done, tested** | Hashes are not signed: integrity detects edits but is not tamper-proof |
+| Policy engine: no unauthorised modification | **Done for tool calls, tested with simulated calls** | `tests/test_improvement.py`. Not yet run in a live Claude Code session; cannot see writes made inside a shell command; absent in a standalone-skill install |
+| Approval records and remediation phase | **Done, tested** | An approval record is an audit entry, not proof of who typed it |
+| Project intake and questions | **Done, tested** | — |
+| Stack adapters | **Done, tested** on 7 fixtures (Node/TS, Python, Go, monorepo, AI app, Terraform-only, unsupported). Adapters also exist for Java, PHP, Rust, Dart/Flutter, .NET, Ruby | No fixtures yet for those six; no microservice fixture |
+| Orchestration: waves, state, resume | **Done, tested** | Token and time budgets are not enforced in code |
+| Agents | Orchestrator (the skill), `expert-reviewer`, `independent-reviewer` | Standards research, implementation and verification are steps the orchestrator performs, not separate agents. No typed-output validation of subagent results beyond `findings.json` validation |
+| Recommendation contract and standards research | **Specified** in `references/improvement-loop.md` | Instruction-level: nothing verifies that a cited URL exists or says what is claimed |
+| Verified improvement loop | **Benchmark measurement and verdicts done, tested** | The loop around them (branch, PR, review) is instruction-level |
+| Diagrams from evidence | **Dependency graph and ERD done, tested** | C4, API/service calls, infrastructure topology, trust boundaries, trend charts: drawn by the experts, not generated |
+| Tool integration | **Detection only**: 15 optional tools listed with availability; run through `evidence run` | No parsers that turn SARIF/JSON tool output into findings |
+| Prompt-injection protection | **Pattern scan + rule in the skill, tested** | Pattern-based; not evaluated against adversarial repositories with a live model |
+| Final delivery package | **Done, tested** | HTML scorecard only; no PDF, Excel or dashboard |
+| Docker runner | **Done, tested** on Linux and in CI | Deterministic engine only. No separate sandbox for running untrusted project code. macOS/Windows not tested |
+| CI | **Passing** on Linux, macOS, Windows × Python 3.10/3.13, lint, Docker smoke test | No dependency/image vulnerability scan, no SBOM |
+| Continuous engineering (PR gates, schedules, drift, trends) | **Not built** | `score` and `bench compare` exit codes make a CI gate possible; no workflow templates, history or trend tracking yet |
+| Supply chain (SBOM, provenance, signed releases, skill registry) | **Not built** | Actions are pinned by commit; Dependabot is configured |
+| Releases, updates, rollback | Changelog and version-consistency test | No tag yet; upgrade and rollback not tested between two published versions |
+| Skill evaluation (with vs without the skill; detection accuracy, false positives, cost) | **Not done** | The most important missing piece |
+| Dashboard, portfolio view, UI approvals | **Not built** | — |
 
 ## v1.0 release checklist
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| 1 | Scorecard integrity: incomplete evidence never returns an unjustified GO | Met | `tests/test_scoring.py` |
-| 2 | All 23 roles validated | Partly | Specifications are checked for structure; output quality is not evaluated |
-| 3 | Cross-project support: at least five distinct project types tested | Met for discovery | 7 fixtures in `tests/test_engine.py`; full reviews on real projects not yet done |
-| 4 | Docker: fresh build and isolated audit command pass | Met on Linux | `tools/docker_smoke.sh` |
-| 5 | CI: required PR checks pass | Not yet shown | Workflow exists; needs its first run |
-| 6 | Security: no exposed secrets or unapproved mutations | Partly | Masking and command policy tested; edit prevention not enforced |
-| 7 | Reports: evidence links and artifacts validated | Met for the scorecard | Engine validates every reference |
-| 8 | Documentation: every documented command verified | Met for Linux | Commands in `docs/` were run; exceptions are marked in place |
-| 9 | Updates: upgrade and rollback tested | Not met | No second published version yet |
-| 10 | Installation: fresh install on supported systems | Partly | Plugin install/uninstall tested from a local clone on Linux |
-| 11 | Recovery: interrupted runs resume or fail safely | Met | `test_interrupted_review_fails_safe`, state tests |
-| 12 | Release: versioned artifact and release notes | Not met | No tag yet |
+| 1 | Incomplete evidence never returns an unjustified GO | Met | `tests/test_scoring.py` |
+| 2 | All 23 roles validated | Partly | Structure is checked; output quality is not evaluated |
+| 3 | At least five project types tested | Met for discovery | 7 fixtures; no full reviews of real projects yet |
+| 4 | Docker: fresh build and isolated audit pass | Met on Linux | `tools/docker_smoke.sh`, CI |
+| 5 | Required PR checks pass | Met | CI green on all eight jobs for the Windows fix |
+| 6 | No exposed secrets or unapproved mutations | Mostly | Masking, command policy and edit guard tested; guard not yet run live |
+| 7 | Reports: evidence links validated | Met for scorecard and package | Engine validates every reference |
+| 8 | Every documented command verified | Met for Linux | Exceptions are marked in the docs |
+| 9 | Upgrade and rollback tested | Not met | Needs two published versions |
+| 10 | Fresh installation on supported systems | Partly | Plugin install tested from a local clone on Linux |
+| 11 | Interrupted runs resume or fail safely | Met | State and end-to-end tests |
+| 12 | Versioned artifact and release notes | Not met | No tag yet |
 
-Five of twelve are met, four partly, three not. This is not a v1.0.
+Six met, four partly, two not.
 
 ## Known limitations
 
-- **The AI workflow is unevaluated.** The engine is tested; how well Claude plays the 23 experts on a real project has not been measured. The next step is with-skill versus without-skill runs on the fixtures and on one real project, reviewed by a person.
-- **The engine validates form, not truth.** It proves a command ran and what it printed. It cannot tell whether that command was a meaningful test of the claim, or whether a score of 85 is fair. A reviewer still has to read the evidence.
-- **Evidence is not tamper-proof** (see `docs/SECURITY.md`).
-- **Secret detection is pattern-based** and will miss unusual formats; it also produces false positives that need triage.
-- **Unsupported stacks** (for example Elixir, Swift, C/C++) are reviewed by reading only; their run-based checks are Not assessed.
+- **The AI workflow is unevaluated.** The engine is tested; how well Claude performs as the 23 experts on a real project has not been measured.
+- **The engine validates form, not truth.** It proves a command ran and what it printed. It cannot tell whether that command was a meaningful test, whether a score of 85 is fair, or whether a cited source says what the report claims. A person still has to read the evidence.
+- **The guard is not a sandbox.** It checks tool calls by pattern. Run untrusted projects' code in a container or VM of your own.
+- **Benchmarks on a development machine show direction, not production numbers.**
+- **Secret and injection detection are pattern-based**: they miss unusual cases and raise false positives.
+- **Unsupported stacks** are reviewed by reading only.
 - **No licence** has been chosen.
 
 ## Suggested order
 
-1. Merge this pull request once CI is green; tag v0.2.0.
-2. Evaluate the skill on the fixtures and one real project; fix what the evaluation shows.
-3. Plugin hooks that block edits during assessment; remediation tooling.
-4. Remaining fixtures; image and dependency scanning; SBOM.
-5. A second release, to test upgrade and rollback.
-6. P2 items only after the CLI workflow is stable.
+1. Evaluate the skill: the same fixtures and one real project, with and without the skill, reviewed by a person. Fix what that shows.
+2. Run the guard in a live session; add a sandboxed runner for project code.
+3. Parsers for the most useful scanners (semgrep, osv-scanner, trivy) so their results become findings with evidence.
+4. Tag a release with checksums and an SBOM; then a second release to test upgrade and rollback.
+5. CI templates for pull-request gates and scheduled re-checks, with history.
+6. Dashboard and further exports, once the above is stable.

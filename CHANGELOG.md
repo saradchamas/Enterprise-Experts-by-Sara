@@ -2,6 +2,20 @@
 
 Versions follow [Semantic Versioning](https://semver.org). Until 1.0.0, minor versions may change the review file formats; each such change is listed under "Breaking".
 
+## [0.3.0] - 2026-11-20
+
+### Added
+- **Edit and command guard.** As a plugin, a PreToolUse hook now enforces the review's rules on Claude's own tool calls: project files are read-only during assessment; during remediation an edit needs a recorded approval covering that file and a non-default branch; destructive, publishing and deploying commands are blocked unless that exact command was approved. Closes the gap where "read-only" was only an instruction.
+- `approve`, `state phase`, `state close`: recorded approvals and an explicit remediation phase.
+- **Verified improvement loop.** `bench run` / `bench compare` measure a command before and after a change and report improved, regressed, no significant change or not comparable, judging the difference against run-to-run noise.
+- **Diagrams from code.** `graph` writes a module dependency graph (with circular dependencies) and a database ERD from SQL and Prisma files, as Mermaid, labelled with their evidence level.
+- **Final Engineering Delivery package.** `package` organises what a review produced and lists what is missing instead of filling gaps.
+- Discovery lists optional analysis tools (semgrep, osv-scanner, trivy, gitleaks, k6, lighthouse and others) with whether they are installed, and flags text in the repository that tries to instruct an AI reviewer.
+- Recommendation contract (authoritative source, applicability, options, trade-offs, verification) and an `independent-reviewer` subagent.
+
+### Fixed
+- `score` crashed on Windows consoles that cannot encode the scorecard's characters, and reported the crash as an invalid review.
+
 ## [0.2.0] - 2026-11-20
 
 ### Fixed

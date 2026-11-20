@@ -47,10 +47,43 @@ If a session is interrupted, start a new one in the same project and ask to cont
 | `EE evidence run --review <review> --area N --title "..." [--cwd DIR] [--timeout S] [--approved] -- <command>` | Run a check and capture it. |
 | `EE evidence note --review <review> --area N --kind observation\|inference --title "..." [--location path:line] [--project DIR] [--detail "..."]` | Record something read or reasoned. |
 | `EE evidence list --review <review>` | List records with their derived level; broken records are flagged. |
+| `EE approve --review <review> --by NAME [--findings ID ...] --paths GLOB ...` | Record that the user approved a fix touching these files. |
+| `EE approve --review <review> --by NAME --exact-command "..."` | Record that the user approved one risky command. |
+| `EE state phase --review <review> --phase remediation\|assessment` | Open or leave the remediation phase (needs an approval). |
+| `EE state close --review <review>` | Mark the review finished; the edit guard stops applying. |
+| `EE bench run --review <review> --name N --label baseline\|candidate [--runs 5] [--warmup 1] [--metric-regex RX] -- <command>` | Measure a command several times. |
+| `EE bench compare --review <review> --name N [--min-improvement 10] [--max-regression 5] [--higher-is-better]` | Judge before against after. |
+| `EE graph <project> --out <dir> [--depth 2]` | Dependency graph and database ERD (Mermaid). |
+| `EE package --review <review>` | Build `FINAL-ENGINEERING-DELIVERY/`. |
 | `EE validate --review <review>` | Validate only. |
 | `EE score --review <review> [--json] [--no-write]` | Validate, decide, write the scorecards. |
 
-Exit codes of `score`: `0` GO, `10` CONDITIONAL GO, `20` NO-GO, `2` invalid review. `evidence run` exits `3` when it refuses a risky command. These make the engine usable as a CI gate.
+Exit codes of `score`: `0` GO, `10` CONDITIONAL GO, `20` NO-GO, `2` invalid review. `evidence run` exits `3` when it refuses a risky command. `bench compare` exits `0` improved, `10` no significant change, `20` regressed, `2` not comparable. These make the engine usable as a CI gate.
+
+## Approvals and the edit guard (plugin install)
+
+While a review is open in a project, the plugin checks each of Claude's edits and shell commands:
+
+| Phase | Editing project files | Risky commands (delete, push, deploy, migrate...) |
+|---|---|---|
+| assessment | blocked; only the review folder is writable | blocked unless that exact command was approved |
+| remediation | allowed only for files covered by a recorded approval, and never on `main`/`master` | blocked, except committing on the fix branch |
+| closed | not checked | not checked |
+
+When you say yes to a fix, Claude records it (`approve`), which is what unlocks those files. If a review was abandoned and the guard is in your way, run `EE state close --review <review>`.
+
+The standalone skill (without the plugin) has no hook; there the same rules are instructions only.
+
+## Measuring an improvement
+
+```bash
+EE bench run --review review --name orders-list --label baseline -- python scripts/bench_orders.py
+# ... make the approved change on a branch ...
+EE bench run --review review --name orders-list --label candidate -- python scripts/bench_orders.py
+EE bench compare --review review --name orders-list
+```
+
+The verdict is `improved` only when the median changed by at least the threshold and by more than twice the run-to-run standard deviation. Different commands, metrics, machines or failed runs are refused as not comparable.
 
 The older entry points `discover_project.py` and `scorecard.py` still work and call the same engine.
 
