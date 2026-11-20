@@ -42,6 +42,25 @@ In short: this edition gives you the method and the report. It cannot give you a
 
 The full edition, its tests and its evaluation record are at <https://github.com/saradchamas/Enterprise-Experts-by-Sara>.
 
+## Data handling
+
+This plugin has no service behind it and no connectors. Nothing is sent to the author, and nothing is retained outside your machine.
+
+**What it reads.** The files of the project you ask it to review. If those files contain personal data (seed data, fixtures, configuration), Claude reads it as part of the review.
+
+**What it stores, and where.** Only files in `enterprise-review/<date>/` inside your project: the intake answers (including the name of whoever answered and approved), the evidence log, saved command output, the findings and the reports. Values that look like secrets are masked before output is saved. Delete the folder to remove everything.
+
+**What can leave your machine, and only when you say yes at the start:**
+
+| What | Goes to | When |
+|---|---|---|
+| Search terms and page requests | The web search and fetch tools of your Claude session, and the sites they open | Only if you ask for research. You choose whether terms stay generic or may include project details. Secrets and personal data are never put into a search. |
+| Names and versions of your dependencies | The package registry or advisory service of your stack (for example the npm registry for `npm audit`, PyPI's advisory service for `pip-audit`) | Only if you allow tools that contact the network |
+
+The plugin itself runs no code. Any command is run by Claude in your session, under the permissions you have set there.
+
+It is intended for software teams, not for users under 18.
+
 ## Limits
 
 - A full review reads a lot of the project and can use several hundred thousand tokens.
