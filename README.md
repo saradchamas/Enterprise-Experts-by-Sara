@@ -47,9 +47,11 @@ Target states: **Architecture Reviewed · Security Assessed · Testing Evidence-
 
 Three modes: **Full** (all 23 areas), **Quick** (8 areas), **Focused** (the areas you name; its decision covers that scope only).
 
-## Status: v0.3.0, not yet v1.0
+## Status: v0.4.0, not yet v1.0
 
-What is implemented and tested, and what is not, is tracked honestly in [docs/ROADMAP.md](docs/ROADMAP.md). In short: the decision engine, intake, evidence recording, stack detection, edit/command guard, before/after benchmarks, diagrams from code, delivery packaging, Docker runner and CI are implemented and covered by 101 automated tests. The 23-expert AI workflow has not yet been evaluated end to end on real projects, and several items (scanner integrations beyond detection, PDF/Excel export, signed releases, scheduled reviews, dashboard) are not built.
+What is implemented and tested, and what is not, is tracked honestly in [docs/ROADMAP.md](docs/ROADMAP.md). Enterprise Experts is one reusable skill, not a hosted product: there is no server, dashboard or database to run. You install it once and invoke it in any project; it works out what that project is and applies only what fits.
+
+In short: the decision engine, intake, capability matrix, evidence recording, stack detection, scanner-result import, edit/command guard, before/after benchmarks, diagrams from code, screenshot comparison, delivery packaging, Docker runner and CI are implemented and covered by 124 automated tests. A first with-versus-without comparison on a small sample project is recorded in [docs/EVALUATION.md](docs/EVALUATION.md); the workflow has not yet been evaluated on real projects, and several items (PDF/Excel export, signed releases, scheduled reviews) are not built.
 
 ## Install
 
@@ -95,6 +97,7 @@ PROJECT_DIR=/path/to/project docker compose run --rm audit      # same, isolated
 | [Intake questions](skills/enterprise-experts/references/intake-questions.md) | What is asked and what each answer changes |
 | [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) | Architecture, tests, adding adapters, questions and experts |
 | [docs/UPDATES.md](docs/UPDATES.md) | Versioning, upgrading, rolling back |
+| [docs/EVALUATION.md](docs/EVALUATION.md) | What has been measured about the skill, and what has not |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Gap analysis, v1.0 checklist, known limitations |
 | [CHANGELOG.md](CHANGELOG.md) | Changes per release |
 

@@ -2,6 +2,30 @@
 
 Versions follow [Semantic Versioning](https://semver.org). Until 1.0.0, minor versions may change the review file formats; each such change is listed under "Breaking".
 
+## [0.4.0] - 2026-11-20
+
+### Added
+- **Capability matrix.** `capabilities` (also written by `discover --out`) classifies each of the 23 areas as applicable, not applicable or not assessed for this project, with the reason, and each run-based check as available, missing a tool, without a command, or unsupported. The skill applies only what the project needs.
+- **Scanner results as evidence.** `scan import` normalises SARIF, npm audit, osv-scanner, pip-audit, trivy and gitleaks output into candidate findings for triage.
+- **Visual regression.** `visual compare` / `visual approve` compare real PNG screenshots with user-approved baselines, using a dependency-free PNG decoder.
+- **AI engineering workflow**, used only when the project uses AI: prompt injection, tool permissions, data sent to providers, evaluation, cost, and model, provider and dataset selection behind a privacy gate.
+- **Deployment advisor**: project-specific comparison of hosting approaches; discovery now derives a deployment profile.
+- Guidance for diagrams with evidence labels, real screenshots, and vetting skills, plugins and MCP servers before recommending them.
+- Intake questions for AI data sharing, AI quality bar, deployment goals and how to run the interface.
+- Rules for researching current documentation before recommending, and for updating the target project's own documentation after approved changes.
+- `docs/EVALUATION.md`: the first with-versus-without comparison of the skill, and what it does not show.
+
+### Changed
+- Captured searches and listings (`grep`, `cat`, `ls`, `git log` and similar) now count as Observed, not Verified. An area whose only evidence is searches is capped as "nothing was run". Existing reviews may score lower.
+- `evidence run --also` lets several areas cite one record.
+- `state` reports areas being worked on as `in_progress` (was `interrupted`).
+
+### Fixed
+- Discovery offered `npm audit` without a lockfile and did not recognise Node's built-in test runner.
+- The delivery package listed out-of-scope reports as missing and omitted `findings.json`.
+- A search pattern containing words like "delete from" could be refused as destructive.
+- `graph` now says when there is nothing to draw.
+
 ## [0.3.0] - 2026-11-20
 
 ### Added

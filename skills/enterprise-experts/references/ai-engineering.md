@@ -1,0 +1,50 @@
+# AI Engineering Workflow
+
+Use this only when the capability matrix says `ai engineering: yes` (the project already uses AI), or when the user explicitly asks whether AI would help. Do not propose adding AI to a project that has no need for it: a rule, a query or a form is usually cheaper, faster and more reliable.
+
+This is a workflow across existing experts, not a 24th expert. Its findings go to: Security (2) for injection and data exposure, Data Governance (14) for what leaves the system, Cost (12) for spend, QA (9) for evaluation, Architecture (1) for the design.
+
+## What to map first (Observed, from the code)
+
+- Where the model is called: files, SDK, model IDs, parameters (max tokens, temperature), streaming, retries, timeouts.
+- What goes into the prompt: system prompt, user input, retrieved documents, tool results. Mark every part an outsider can influence.
+- Tools and agents: what the model can call, with which permissions, and whether a human approves side effects.
+- Retrieval: embedding model, vector store, chunking, what is indexed, who may read what.
+- Memory and logs: what is stored from conversations, where, for how long.
+
+## Checks
+
+| Topic | Check |
+|---|---|
+| Prompt injection | Can untrusted text (user input, a web page, a document, a tool result) reach the prompt and trigger a tool or reveal data? Is output treated as untrusted before it is rendered, executed or used in a query? |
+| Tool permissions | Least privilege per tool; destructive or outward actions need confirmation; no credentials in prompts. |
+| Data exposure | Which personal or confidential data is sent to which provider. Compare with the user's answer to `external_ai_allowed`. Sending data to a provider the user did not authorise is a High or Critical finding. |
+| Retrieval access control | Does retrieval respect the asking user's permissions, or can one tenant retrieve another's documents? |
+| Evaluation | Is there a test set and a pass bar? If not, quality is unknown; say so. Propose a small evaluation set from the critical journeys. |
+| Reliability | Timeouts, retries with backoff, fallback behaviour when the provider is down or rate-limited, handling of malformed output. |
+| Cost | Calls in loops, missing max tokens, no caching, oversized context, no spend cap. Estimate cost per request and per month from real usage numbers when the user has them; otherwise label it an estimate with assumptions. |
+| Abuse | A public endpoint that calls a paid model without authentication or rate limits. |
+
+## Choosing a model or provider
+
+Recommend a change of model or provider only when a finding calls for it (cost, latency, quality, privacy, a deprecated model).
+
+1. **Privacy gate first.** Before comparing anything: what data would be sent, and has the user authorised that provider for that data? Check the provider's current data-retention and training-use terms and the processing region. A free or cheap tier is not assumed safe for private code or personal data. If this gate fails, the option is out, whatever its price.
+2. **Look up current facts; do not rely on memory.** Model line-ups, prices, context sizes, rate limits and deprecations change within months. Use the provider's own documentation and pricing pages, record the URL and the date you checked, and say so if you could not browse. Never quote a price or a model name from memory as current.
+3. **Compare on the project's task**, not on reputation. For each candidate record: provider, exact model ID, context window, tool and structured-output support, price, rate limits, data policy, region, and a fallback.
+4. **Measure when the user allows it.** Run the project's own evaluation set (or the small one you proposed) against the candidates and record quality, latency (p50/p95) and cost per task. Running candidates sends data to them: this needs the user's explicit approval per provider, and test data should be synthetic or approved.
+5. **Weigh** with weights the user agrees to. A reasonable starting point: task quality 35%, reliability and tool use 20%, security and privacy 20%, cost 15%, latency 10%.
+6. **Recommend** one option and a fallback, with the reasons, the evidence and the date the facts were checked.
+
+Options to consider when relevant: the provider already in use; other first-party APIs (Anthropic, OpenAI, Google); routers and gateways that give one API over many models (OpenRouter, LiteLLM); fast inference hosts for open models (Groq and similar); self-hosted or local runtimes (vLLM, Ollama) when data must not leave the user's infrastructure and they can run the hardware.
+
+## Datasets and open models
+
+When a project needs a dataset or an open model:
+
+- Establish the need first: task, language, domain, size.
+- Search the model and dataset hubs and official data sources; read the dataset or model card.
+- Check the licence against how the product is sold, the provenance of the data, and whether it contains personal data.
+- A file being on a hub is not a safety guarantee: prefer safe weight formats, pin the exact revision, record its hash, and never load untrusted pickled files.
+- Profile a dataset before recommending it (size, coverage, duplicates, missing values, balance).
+- Download or integrate only with the user's approval; record version and hash.

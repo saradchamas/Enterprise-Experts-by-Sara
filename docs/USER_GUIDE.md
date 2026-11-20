@@ -39,11 +39,12 @@ If a session is interrupted, start a new one in the same project and ask to cont
 | Command | Purpose |
 |---|---|
 | `EE discover <project> [--out <review>]` | Inventory. Read-only. |
+| `EE capabilities --review <review> [--json]` | Which areas, workflows and run-based checks apply to this project. |
 | `EE questions --review <review> [--mode full\|quick\|focused]` | Intake questions for this project, as JSON. |
 | `EE intake --review <review>` | Validate `intake.json`; print the risk profile. |
 | `EE state init --review <review> --mode <mode> [--scope N ...]` | Start tracking a review. |
 | `EE state set --review <review> --area N --status pending\|in_progress\|done\|failed\|skipped` | Update one area. |
-| `EE state show --review <review>` | What is ready, interrupted, blocked, done. |
+| `EE state show --review <review>` | What is ready, in progress, blocked, done. |
 | `EE evidence run --review <review> --area N --title "..." [--cwd DIR] [--timeout S] [--approved] -- <command>` | Run a check and capture it. |
 | `EE evidence note --review <review> --area N --kind observation\|inference --title "..." [--location path:line] [--project DIR] [--detail "..."]` | Record something read or reasoned. |
 | `EE evidence list --review <review>` | List records with their derived level; broken records are flagged. |
@@ -53,6 +54,9 @@ If a session is interrupted, start a new one in the same project and ask to cont
 | `EE state close --review <review>` | Mark the review finished; the edit guard stops applying. |
 | `EE bench run --review <review> --name N --label baseline\|candidate [--runs 5] [--warmup 1] [--metric-regex RX] -- <command>` | Measure a command several times. |
 | `EE bench compare --review <review> --name N [--min-improvement 10] [--max-regression 5] [--higher-is-better]` | Judge before against after. |
+| `EE scan import --review <review> --evidence E-0xx` (or `--file <path in review folder>`) | Normalise scanner output into candidate findings. |
+| `EE visual compare --review <review> --name N --image <png> [--threshold 0.1]` | Compare a real screenshot with its approved baseline. |
+| `EE visual approve --review <review> --name N --by NAME` | Make the current capture the approved baseline. |
 | `EE graph <project> --out <dir> [--depth 2]` | Dependency graph and database ERD (Mermaid). |
 | `EE package --review <review>` | Build `FINAL-ENGINEERING-DELIVERY/`. |
 | `EE validate --review <review>` | Validate only. |
@@ -86,6 +90,40 @@ EE bench compare --review review --name orders-list
 The verdict is `improved` only when the median changed by at least the threshold and by more than twice the run-to-run standard deviation. Different commands, metrics, machines or failed runs are refused as not comparable.
 
 The older entry points `discover_project.py` and `scorecard.py` still work and call the same engine.
+
+## What the skill applies to your project
+
+After discovery the engine writes `capability-matrix.md`. Each of the 23 areas is marked applicable, not applicable or not assessed, with the reason; three extra workflows switch on only when the project calls for them:
+
+| Workflow | Switches on when | What you get |
+|---|---|---|
+| AI engineering | the project uses an LLM or other AI library | prompt-injection, tool-permission and data-exposure review; evaluation and cost; model or provider comparison if a finding calls for it |
+| Deployment advisor | the project is deployable and hosting is unsettled, a problem, or you ask | a comparison of fitting options for this project and the simplest one that meets your needs |
+| Visual documentation | the project has an interface that can be run | real screenshots and visual regression against baselines you approve |
+
+Nothing is sent to an outside AI provider, installed, provisioned or deployed without your explicit approval.
+
+## Scanner results
+
+When a supported scanner is installed, its machine-readable output is captured as evidence and normalised:
+
+```bash
+EE evidence run --review review --area 2 --title "npm audit" --cwd . -- npm audit --json
+EE scan import --review review --evidence E-007
+```
+
+Supported: SARIF (semgrep, CodeQL, trivy and others), `npm audit --json`, osv-scanner JSON, pip-audit JSON, trivy JSON, gitleaks JSON. The output is a list of candidates; each is confirmed against the project before it becomes a finding.
+
+## Screenshots
+
+```bash
+npx playwright screenshot --viewport-size=1440,900 http://localhost:3000 shot.png
+EE visual compare --review review --name home-desktop --image shot.png     # exit 10: no baseline yet
+EE visual approve --review review --name home-desktop --by Sara
+EE visual compare --review review --name home-desktop --image shot.png     # exit 0 match, 20 changed
+```
+
+Baselines live in `enterprise-review/visual-baselines/` so later reviews compare against them.
 
 ## Reading the scorecard
 
