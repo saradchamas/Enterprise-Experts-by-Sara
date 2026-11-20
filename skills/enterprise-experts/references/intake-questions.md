@@ -13,7 +13,8 @@ The review starts by asking. A production-readiness verdict depends on facts tha
 4. **Explain why when it isn't obvious.** Each question carries a `why`. One short clause is enough.
 5. **"I don't know" is an answer.** Record it as `"unknown"`. Unknown data types or money handling raise the risk profile, and the checks that depended on the answer become `not_assessed` with "owner did not know" as the reason. Often that is itself a finding (nobody knows whether backups were ever restored).
 6. **Keep asking during the review.** Experts will hit questions the bank doesn't cover (a business rule, an odd config). Ask then, in the same way, and add the answer to `intake.json` under a new key. Collect non-urgent ones and ask them together rather than interrupting repeatedly. Questions only the business can answer also go in the relevant deliverable under "Needs a human".
-7. **If the user is not available** (scheduled or unattended run): do not invent answers. Answer what the repository proves, mark the rest `"unknown"`, state at the top of the report that the intake was unanswered, and expect a stricter risk profile and a decision no better than CONDITIONAL GO.
+7. **If the answers were supplied in advance** (in the request, a file, or by someone relaying them), use them as given, record who supplied them in `answered_by`, and mark everything not covered as `"unknown"`.
+8. **If the user is not available** (scheduled or unattended run): do not invent answers. Answer what the repository proves, mark the rest `"unknown"`, state at the top of the report that the intake was unanswered, and expect a stricter risk profile and a decision no better than CONDITIONAL GO.
 
 ## intake.json
 

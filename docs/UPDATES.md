@@ -35,8 +35,22 @@ Plugin or clone: check out the previous tag (`git checkout vX.Y.Z`) and reinstal
 
 Review folders in your projects are never touched by an update or a rollback.
 
+## Releases
+
+Pushing a tag `vX.Y.Z` that matches the version in the code runs `.github/workflows/release.yml`: tests, a reproducible build of `enterprise-experts.skill`, an SBOM (`sbom.cdx.json`), `SHA256SUMS`, a build provenance attestation, and a GitHub release with the changelog entry. To check a download:
+
+```bash
+sha256sum -c SHA256SUMS
+gh attestation verify enterprise-experts.skill --repo saradchamas/Enterprise-Experts-by-Sara
+```
+
+A signed release shows where the file came from and that it was not altered. It does not show that the software is free of defects.
+
+## Tested
+
+`tools/upgrade_rollback_test.sh <old> <new>` installs the old version of the plugin from a local clone, upgrades it, and rolls back by uninstalling and installing the earlier version. It passed for 0.3.0 → 0.4.0 → 0.3.0 (Linux, Claude Code CLI). Note that `claude plugin update` only moves forward; rolling back is uninstall, then install.
+
 ## What is not done yet
 
-- No tagged releases exist yet; v0.2.0 is the first version intended to be tagged, after its pull request is merged.
-- The plugin update commands above follow the Claude Code CLI but have not been exercised against a published second version.
-- No migration tool converts a schema-1 review to schema 2; re-run the review.
+- No release has been tagged, so the release workflow has not run and the verification commands above are untested.
+- No migration tool converts an older review folder to a newer schema; re-run the review.

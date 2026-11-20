@@ -22,7 +22,7 @@
 | Monitoring — Configured | | |
 | Deployment — Repeatable | | |
 
-Rows whose area is outside this review's scope are marked "➖ Not in scope", not left to look like a pass. A target is "Proven" only with Verified evidence. Reading the code and finding it plausible is "Partly".
+Rows whose area is outside this review's scope are marked "➖ Not in scope", and rows that do not apply to this kind of project "➖ Not applicable", not left to look like a pass. Copy the scorecard's "How to read this result" sentences under the decision. A target is "Proven" only with Verified evidence. Reading the code and finding it plausible is "Partly".
 
 ## 3. Scorecard
 
@@ -32,6 +32,10 @@ Rows whose area is outside this review's scope are marked "➖ Not in scope", no
 
 | ID | Area | Severity | Issue | Evidence | Fix | Status |
 |---|---|---|---|---|---|---|
+
+### Medium and Low findings
+
+{A compact table: ID, area, severity, issue, status. Do not drop them; they are the backlog.}
 
 ## 5. What was done in this review
 

@@ -17,6 +17,9 @@ What each level can prove:
 - **Verified** proves that this command ran and produced this output. It is the only level that can show something *works*: tests pass, a backup restores, a build succeeds, p95 is 840 ms.
 - **Observed** proves what the code or config *says*. Reading a backup cron job shows a backup is configured, not that it restores. Reading a deploy workflow does not show a deployment succeeded.
 - **Inferred** is reasoning from indirect signals. It can support a *finding* (a risk), never a pass.
+- A web page you consulted is recorded as an observation with its URL as the location (`EE evidence note --kind observation --location https://...`); the date is stored. It shows what the page said on that day.
+- When a command is meant to produce a file (a screenshot, a report), name it with `--output`: the file's hash joins the record, and the record is unusable if the file was not produced or is changed later.
+- Evidence commands can run in parallel; the log is locked while it is written. `EE evidence share --id E-0xx --also N` lets another area cite an existing record.
 - Looking properly and finding nothing is evidence: run the search through `EE evidence run -- grep -rn "helmet\|Content-Security-Policy" src` and cite it. A captured search is Observed. An area whose only evidence is searches has not had anything run, and is capped accordingly.
 - One run can serve several areas: `EE evidence run --area 9 --also 2 5 ...` lets those areas cite the same record instead of repeating the command.
 
@@ -71,14 +74,15 @@ Calibrate to the intake answers: the same missing control can be medium for an i
 
 Rules the engine enforces:
 - **Required areas.** `full` needs all 23 areas; `quick` needs 1, 2, 5, 6, 7, 8, 9, 10; `focused` needs a `"scope"` list and every area in it. A missing area is an error, not a gap to explain later.
-- **Area status**: `assessed`, `partial` (some checks impossible), `not_assessed`, `not_applicable`. The last two need a `reason` and carry no score. Areas 1, 2, 9, 17 and 22 cannot be `not_applicable`.
+- **Area status**: `assessed`, `partial` (some checks impossible), `not_assessed`, `not_applicable`. The last two need a `reason` that says why in a sentence, and carry no score. Areas 1, 2, 9, 17 and 22 cannot be `not_applicable`. Marking an area not applicable when the capability matrix found it applicable is allowed (the matrix can be wrong) and is shown on the scorecard.
 - **Score**: a number from 0 to 100.
-- **Checks**: every assessed or partial area lists the checks performed. `pass` and `fail` need evidence; a `pass` needs a command that actually ran (not timed out, tool found) or an observation. `not_assessed` / `not_applicable` checks need a `reason`.
+- **Checks**: every assessed or partial area lists the checks performed. `pass` and `fail` need evidence. A `pass` needs a command that ran and exited 0, or an observation; a command that failed, timed out or could not start can only back a `fail` or a finding. `not_assessed` / `not_applicable` checks need a `reason`.
 - **Evidence references** must exist in `evidence-log.json`, be intact, and belong to the same area. Only the areas that synthesise others' work (17, 19, 21, 22, 23) may cite another area's evidence.
 - **IDs** of areas, checks, findings and evidence are unique.
 - **Finding status**:
   - `open` — needs evidence.
-  - `fixed` — needs `"verification": ["E-0xx"]` pointing at a command re-check that ran after the fix.
+  - `fixed` — needs `"verification": ["E-0xx"]`: a command that exited 0, recorded after the evidence that found the problem. The run that demonstrated the defect cannot verify its own fix.
+  - `pending_decision` — a verified fix exists but the user must still decide (for example correct but slower). Needs a `note`. Counts as unresolved.
   - `accepted` — needs `"mitigation": {"approved_by": "...", "reason": "...", "date": "YYYY-MM-DD", "controls": ["..."]}`. Only the user can accept a risk.
   - `false_positive` — needs a `reason`.
 - **Intake**: `intake.json` must exist and be valid; `mode` must match it; `risk_profile` may not be lower than the answers imply.
@@ -95,7 +99,7 @@ The expert proposes a score; the engine applies caps.
 | 40–59 | Weak: important controls missing. |
 | 0–39 | Absent or dangerous. |
 
-Caps: an unresolved Critical (open or accepted) caps the area at **40**; an open High at **70**; no Verified evidence at **75**; inferred evidence only at **50**. The overall score is the weighted average of scored areas, core areas counting double.
+Caps: an unresolved Critical (open or accepted) caps the area at **40**; an open High at **70**; no Verified evidence at **75**; inferred evidence only at **50**; no check passed at **40**; more checks failed than passed at **70**. The overall score is the weighted average of scored areas, core areas counting double.
 
 ## Risk profiles and release gates
 
@@ -109,5 +113,7 @@ Decision:
 - **NO-GO** — any unresolved Critical; a core area not assessed; a core area below the blocking score; or the review is invalid.
 - **CONDITIONAL GO** — otherwise, if any of: an open High; a core area below the GO score, without Verified evidence, or only partially assessed; a non-core area not assessed; an accepted High on a sensitive or regulated project; a core area outside the review's scope (always true for a narrow focused review).
 - **GO** — none of the above.
+
+The scorecard adds a "How to read this result" section when the label alone could mislead: a prototype, a NO-GO with no Critical or High finding (things are missing, nothing dangerous is live), a non-core area scoring very low under a CONDITIONAL GO, or an override of the capability matrix. Carry those sentences into the report.
 
 A core area that is genuinely `not_applicable` (no database) is skipped. The user can decide to launch against the engine's decision; the report then shows both, with who decided and why. Process exit codes: GO 0, CONDITIONAL GO 10, NO-GO 20, invalid 2.

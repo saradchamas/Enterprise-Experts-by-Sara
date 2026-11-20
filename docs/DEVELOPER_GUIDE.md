@@ -44,6 +44,8 @@ A skill must work when only its own folder is installed. So the engine sits in `
 | `capabilities.py` | Capability matrix: applicable areas, workflows and run-based checks. |
 | `scanners.py` | Scanner output (SARIF and tool JSON) to candidate findings. |
 | `visual.py` | PNG decoding and screenshot comparison against approved baselines. |
+| `export.py` | `report.xlsx` and `report.pdf` writers (standard library). |
+| `history.py` | Trend between two reviews; the model-free gate. |
 | `cli.py` | Argument parsing only. |
 
 Data flow: `discover` → `questions`/`intake.json` → `evidence-log.json` + `findings.json` → `validate` → `score` → scorecards.
@@ -54,6 +56,9 @@ Data flow: `discover` → `questions`/`intake.json` → `evidence-log.json` + `f
 python -m unittest discover -s tests -t .     # all tests; no dependencies
 ruff check .                                  # lint (pip install ruff)
 tools/docker_smoke.sh                         # needs Docker
+python tools/build_release.py --verify        # skill archive, SBOM, checksums
+tools/upgrade_rollback_test.sh <old> <new>    # needs the Claude Code CLI
+tools/live_guard_test.sh                      # needs a logged-in Claude Code CLI
 claude plugin validate .                      # needs the Claude Code CLI
 ```
 
@@ -67,6 +72,7 @@ claude plugin validate .                      # needs the Claude Code CLI
 | `tests/test_engine.py` | Evidence capture, masking, command policy, intake, state, adapters on the fixtures. |
 | `tests/test_improvement.py` | Guard decisions and the hook script, approvals, benchmark verdicts, diagrams, packaging, prompt-injection scan. |
 | `tests/test_universal.py` | Capability matrix on every fixture, scanner importers (real npm audit and pip-audit output), PNG decoder and visual regression (real browser screenshots), deployment profile, AI and deployment questions. |
+| `tests/test_exports.py` | Workbook and PDF structure, trend, gate. |
 | `tests/test_cli_e2e.py` | Whole reviews through the real CLI; interrupted runs; skill package consistency (all 23 experts specified, referenced files exist, versions agree, standard library only). |
 
 Fixtures in `tests/fixtures/`: `healthy-node`, `flawed-node`, `monorepo`, `python-fastapi` (AI app), `go-service`, `infra-only`, `unsupported-elixir`.
@@ -92,7 +98,7 @@ Edit its section in the matching `references/experts-*.md`. Each section must ke
 
 1. Update `__version__` in `ee/__init__.py`, `version` in `.claude-plugin/plugin.json`, the image tag in `compose.yaml`, and add a `CHANGELOG.md` entry. A test fails if the first three disagree with the changelog.
 2. All CI jobs green on the pull request.
-3. Merge, tag `vX.Y.Z`, create the GitHub release with the changelog entry and the packaged `.skill` file.
+3. Merge, then push the tag `vX.Y.Z`. The release workflow builds, attests and publishes the artifacts. Pushing the tag is the release decision; nothing publishes without it.
 
 ## Commit conventions
 

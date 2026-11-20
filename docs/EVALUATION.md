@@ -41,12 +41,37 @@ What has actually been measured about the skill, as opposed to its engine's unit
 8. A search pattern containing words such as "delete from" could be refused as a destructive command.
 9. Templates and instructions did not cover quick mode well (scorecard timing, out-of-scope targets, sensitive projects in quick mode, how much sourced research a quick review needs).
 
+## 2026-11-20 — five runs of v0.4.0: full self-review, healthy project, fix loop, AI and deployment, screenshots
+
+**Setup.** Five separate runs of the skill, each by a fresh agent with pre-supplied intake answers, one run each. Their review folders were re-scored afterwards with the fixed engine; all five decisions were unchanged, which means none of them had leaned on the loopholes found.
+
+| Run | Project | Mode | Engine decision | Cost |
+|---|---|---|---|---|
+| A | This repository (a real project: Python engine, tests, Docker, CI) | full, all 23 areas | CONDITIONAL GO, 73/100; 5 High, no Critical | about 294,000 tokens, 15 min |
+| B | `healthy-node` sample (a small clean library) | quick | CONDITIONAL GO, 78/100; no Critical or High | about 207,000 tokens, 6 min |
+| C | `flawed-node` sample | focused 2/6/9, then two approved fixes | NO-GO 22 → NO-GO 35 after fixes | about 245,000 tokens, 14 min |
+| D | `python-fastapi` sample | focused 2/11/12 with AI and deployment workflows | NO-GO, 40/100; no Critical or High | about 206,000 tokens, 10 min |
+| E | `static-site` sample | focused 13 with real screenshots | CONDITIONAL GO, 30/100; 3 High | about 213,000 tokens, 7 min |
+
+**What they show.**
+
+- *All 23 experts have now run once, on one real project (A).* Asked whether each reference section gave enough for a real assessment, the reviewer answered: yes for 8 (Architecture, QA, DevOps, Business Logic, Documentation, Strategy, Technical Leadership, Delivery), thin for 12, not useful for 3 (Disaster Recovery, Observability, Analytics). The cause was the same throughout: the sections assume a hosted web application with a database, and this project is a tool. `references/project-types.md` was written in response and has not itself been evaluated.
+- *The full review found real, serious defects in the skill's own engine* (A), all confirmed and fixed in v0.5.0: a check marked "pass" was accepted on the evidence of a command that had failed, so a review built entirely on failed commands scored GO 100/100; the command guard let `ls && rm -rf src` through; parallel evidence runs silently lost records; malformed review files caused crashes instead of INVALID; and there is no licence.
+- *A healthy project did not reach GO* (B). The four findings were real but minor (one Medium, three Low). The result was CONDITIONAL GO only because the reviewer's own scores for two core areas (78 and 65) sat under the fixed 80 gate. With no Critical or High, the decision depends on a subjective score, and a prototype is held to the same gate as a production system. The scorecard now explains this; the gates themselves are unchanged. The capability matrix had also treated the library as a service because it had a Dockerfile (fixed).
+- *The fix loop works end to end* (C): approval recorded, fix branch, 1 test → 14 tests, the injection probe fails before and passes after, mutation checks confirm the tests catch the old code, rollback rehearsed. It also exposed that "fixed" could be verified by the very run that had demonstrated the defect (fixed), that re-running a benchmark corrupted earlier evidence (fixed), and that the loop had no outcome for "correct but slower": the money fix was measurably slower and was honestly left undecided (a `pending_decision` status now exists).
+- *The privacy gate shaped the AI review* (D): only the provider the user allowed was considered, and nothing was sent to any model. The deployment recommendation was "keep the server you already rent", conditional on three facts nobody had confirmed. The run also found that the sample "AI service" declared its libraries but never used them, which the skill had treated as an AI application (fixed: declared and used are now distinguished), and that the suggested `pip-audit` command audited the reviewer's machine instead of the project (fixed).
+- *Screenshots and visual regression work with a real browser* (E): 13 real captures, and no-baseline, match and changed verdicts all behaved. Six of nine UX findings came from a scripted walk of the page, not from the still images. It exposed that a capture which failed and produced no image still counted as Verified evidence, and that the image file was not part of the evidence record (both fixed: `--output` binds the file to the record).
+
+**Cost.** Between about 200,000 and 300,000 tokens and 6 to 15 minutes per run, for projects from 20 lines to about 6,000.
+
+**Honest limits of this round.** One run per case. The reviewers were agents of the same model that wrote the skill, given the answers a user would give; no person judged whether the deliverables were good. Only one of the five projects is real, and it is the skill's own repository. Fixes made in v0.5.0 are covered by tests but have not been through another round of runs.
+
 ## Not yet evaluated
 
-- Any real project, of any size.
-- More than one run per configuration (variance).
-- A healthy project (false positives; does it reach GO when it should?).
-- Each of the 23 experts' output quality; only eight areas ran, once.
-- The AI engineering, deployment advisor and screenshot workflows end to end.
-- The edit guard inside a live Claude Code session (the plugin registers the hook and its logic is tested with simulated tool calls; a live session could not be authenticated in the build environment).
-- Remediation: an approved fix, measured before and after, reviewed independently.
+- A real project that is not this one, and anything large.
+- Repeat runs (variance), and a person judging the quality of the deliverables.
+- Whether a genuinely production-ready project reaches GO.
+- `references/project-types.md` and the other guidance added in v0.5.0.
+- The edit guard inside a live Claude Code session. The plugin registers the hook and its logic is tested with simulated tool calls; a live session could not be authenticated in the build environment. `tools/live_guard_test.sh` runs the check on a machine where `claude` is logged in.
+- Parallel subagents (every run so far used a single agent).
+- The scanner importers for SARIF, osv-scanner, trivy and gitleaks against output captured from those tools.

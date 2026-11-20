@@ -1,8 +1,10 @@
 # AI Engineering Workflow
 
-Use this only when the capability matrix says `ai engineering: yes` (the project already uses AI), or when the user explicitly asks whether AI would help. Do not propose adding AI to a project that has no need for it: a rule, a query or a form is usually cheaper, faster and more reliable.
+Use this only when the capability matrix says `ai engineering: yes` (the code imports and uses an AI library), or when the user explicitly asks whether AI would help. If an AI library is only declared and nothing calls it, there is no AI system to assess yet: report that as the finding, ask whether the code is elsewhere or unwritten, and treat anything further as requirements for a design, rated for the exposure it will have. Do not propose adding AI to a project that has no need for it: a rule, a query or a form is usually cheaper, faster and more reliable.
 
-This is a workflow across existing experts, not a 24th expert. Its findings go to: Security (2) for injection and data exposure, Data Governance (14) for what leaves the system, Cost (12) for spend, QA (9) for evaluation, Architecture (1) for the design.
+This is a workflow across existing experts, not a 24th expert. Its findings go to: Security (2) for injection and data exposure, Data Governance (14) for what leaves the system, Cost (12) for spend, QA (9) for evaluation, Architecture (1) for the design. In a quick or focused review some of those areas are out of scope: put such findings under the closest area that is in scope, say which area they belong to, and list them under "outside this review's scope" in the report.
+
+The user's limit on providers covers your own actions during the review too. A dependency audit, a scanner or a fetch tool that sends project details to a service is something leaving the project: use only what the intake allowed (`execution_allowed`, `external_ai_allowed`), and say what was sent where.
 
 ## What to map first (Observed, from the code)
 
@@ -29,12 +31,16 @@ This is a workflow across existing experts, not a 24th expert. Its findings go t
 
 Recommend a change of model or provider only when a finding calls for it (cost, latency, quality, privacy, a deprecated model).
 
+If the user restricted providers, compare only the allowed ones and state which were excluded and why; do not list the others as options. If no model is in use yet, this is a first choice, not a change: the same steps apply.
+
 1. **Privacy gate first.** Before comparing anything: what data would be sent, and has the user authorised that provider for that data? Check the provider's current data-retention and training-use terms and the processing region. A free or cheap tier is not assumed safe for private code or personal data. If this gate fails, the option is out, whatever its price.
-2. **Look up current facts; do not rely on memory.** Model line-ups, prices, context sizes, rate limits and deprecations change within months. Use the provider's own documentation and pricing pages, record the URL and the date you checked, and say so if you could not browse. Never quote a price or a model name from memory as current.
+2. **Look up current facts; do not rely on memory.** Model line-ups, prices, context sizes, rate limits and deprecations change within months. Use the provider's own documentation and pricing pages and record each as evidence: `EE evidence note --kind observation --location <url> --title ... --detail "<what the page said>"` stores the URL and the date. Pricing pages have tiers (standard, batch, cached, priority): record which tier a price belongs to, and mark a price unconfirmed when the tier is unclear. If a page is blocked, redirects or can only be read through a summarising tool, say so. Never quote a price or a model name from memory as current.
 3. **Compare on the project's task**, not on reputation. For each candidate record: provider, exact model ID, context window, tool and structured-output support, price, rate limits, data policy, region, and a fallback.
-4. **Measure when the user allows it.** Run the project's own evaluation set (or the small one you proposed) against the candidates and record quality, latency (p50/p95) and cost per task. Running candidates sends data to them: this needs the user's explicit approval per provider, and test data should be synthetic or approved.
-5. **Weigh** with weights the user agrees to. A reasonable starting point: task quality 35%, reliability and tool use 20%, security and privacy 20%, cost 15%, latency 10%.
-6. **Recommend** one option and a fallback, with the reasons, the evidence and the date the facts were checked.
+4. **Estimate cost with stated assumptions**: requests per day, input and output tokens per request, days per month. Give a range, and the 2× and 10× figures. With no usage data, say the numbers are assumptions.
+5. **Measure when the user allows it.** Run the project's own evaluation set (or the small one you proposed) against the candidates and record quality, latency (p50/p95) and cost per task. Running candidates sends data to them: this needs the user's explicit approval per provider, and test data should be synthetic or approved.
+   If calling providers is not allowed or there is no evaluation set, do not rank on quality: recommend on privacy, cost and fit, say quality is unmeasured, and propose the evaluation set that would settle it.
+6. **Weigh** with weights the user agrees to. A reasonable starting point: task quality 35%, reliability and tool use 20%, security and privacy 20%, cost 15%, latency 10%.
+7. **Recommend** one option and a fallback, with the reasons, the evidence and the date the facts were checked.
 
 Options to consider when relevant: the provider already in use; other first-party APIs (Anthropic, OpenAI, Google); routers and gateways that give one API over many models (OpenRouter, LiteLLM); fast inference hosts for open models (Groq and similar); self-hosted or local runtimes (vLLM, Ollama) when data must not leave the user's infrastructure and they can run the hardware.
 

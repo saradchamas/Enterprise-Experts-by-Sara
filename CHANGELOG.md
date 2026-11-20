@@ -2,6 +2,47 @@
 
 Versions follow [Semantic Versioning](https://semver.org). Until 1.0.0, minor versions may change the review file formats; each such change is listed under "Breaking".
 
+## [0.5.0] - 2026-11-20
+
+Driven by five evaluation runs of v0.4.0, including a full 23-expert review of this repository (`docs/EVALUATION.md`).
+
+### Fixed (decision integrity)
+- A check marked `pass` was accepted when its only evidence was a command that had failed. A pass now needs a command that exited 0, or an observation.
+- `fixed` could be verified by the same run that demonstrated the defect. The re-check must now be a new, successful run recorded after the evidence that found the problem.
+- Parallel `evidence run` calls silently lost records. The evidence log is now locked while written; tested with threads and separate processes.
+- Malformed review files crashed with a traceback. They now make the review INVALID (exit 2).
+- A file a command was meant to produce (a screenshot) was not part of the evidence. `evidence run --output` binds it to the record; a missing or altered file makes the record unusable.
+- Re-running a benchmark overwrote evidence already cited. Each run now keeps its own file.
+- An area with no passing check could score 100. Caps: no check passed 40, more failed than passed 70. A "not applicable" reason must say why, and overriding the capability matrix is shown on the scorecard.
+
+### Fixed (guard and policy)
+- The guard treated a shell line as read-only when its first word was `ls`, `cat` or `grep`, so `ls && rm -rf src` was allowed. Each chained command is now checked, and writing files by redirection is caught.
+- The policy missed `git -C . push`, `find -delete`, plain `rm`, `gh release create`, `curl --request POST`, `xargs rm`, `sed -i`, `mv` and overwriting `cp`.
+- The engine's own files (`review-state.json`, `evidence-log.json`, scorecards, captured output) can no longer be edited by hand through the hook.
+- Approvals: paths that leave the project and unknown finding IDs are refused.
+
+### Fixed (fit to the project)
+- Discovery treated sample projects under `tests/fixtures` as the project. Such folders are left out, and `discover --exclude` leaves out more.
+- A dependency declared in a manifest but never imported no longer makes the project an API, database or AI project.
+- A Dockerfile alone no longer makes a library a service.
+- `pip-audit` was suggested in a form that audits the reviewer's machine; it is now offered only with a requirements file. Audit commands produce JSON so `scan import` can read them. Python projects without pytest get `unittest`.
+- Checks no longer leave caches (`__pycache__`) in the project.
+- Secret masking in captured output covers more shapes (bearer tokens, URL parameters, JSON and YAML values, command-line flags, private key bodies).
+
+### Added
+- `export`: `report.xlsx` and `report.pdf`, written with the standard library.
+- `trend`: compare two reviews of the same project. `gate`: model-free checks for CI and schedules, with a workflow template.
+- Release workflow (on a version tag): tests, reproducible skill archive, SBOM, checksums, build provenance attestation, GitHub release. `tools/build_release.py` builds and verifies the artifacts; CI runs it.
+- `tools/upgrade_rollback_test.sh`: installs an older version of the plugin, upgrades, rolls back. Passed for 0.3.0 → 0.4.0 → 0.3.0.
+- `references/project-types.md`: how each expert adapts to a tool or library, a mobile app, infrastructure-only, a data pipeline, a prototype; rules for reviewer-written check scripts.
+- Finding status `pending_decision`; benchmark thresholds agreed with the baseline and not changeable afterwards; `--min-abs-change`; `--workload` hashing; `bench --also`; `evidence share`; `evidence list --json`; web sources recorded as observations with URL and date.
+- Visual comparisons are evidence records and produce a difference image.
+- The scorecard explains results whose label could mislead; questions are scoped to the review mode; a snapshot of the scorecard is kept when remediation opens.
+
+### Changed
+- Evidence records include the branch and whether there were uncommitted changes.
+- The delivery package keeps screenshots beside the expert reports, includes probes and research notes, and exits 2 for an invalid review.
+
 ## [0.4.0] - 2026-11-20
 
 ### Added

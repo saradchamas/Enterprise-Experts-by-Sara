@@ -1,0 +1,40 @@
+# Enterprise Experts: model-free checks for a project's own CI.
+#
+# Copy this file to .github/workflows/ in the project you want to watch. It needs no
+# AI model, no secrets and no write access. It fails when a secret appears in the
+# repository, when text aimed at AI reviewers appears, or (with a baseline) when
+# tests, CI or lockfiles disappear. It does not replace a review: the expert review
+# is run by a person with Claude, and its result is compared over time with `trend`.
+#
+# Before use: replace the two <commit SHA> placeholders with real commit SHAs, and
+# pin Enterprise Experts to a release tag you have checked.
+name: Enterprise Experts gate
+
+on:
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"   # every Monday; scheduled runs only read the repository
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@<commit SHA>
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@<commit SHA>
+        with:
+          repository: saradchamas/Enterprise-Experts-by-Sara
+          ref: main            # pin to a release tag, e.g. v0.5.0
+          path: .enterprise-experts
+          persist-credentials: false
+      - name: Gate
+        run: |
+          baseline=""
+          # Commit the discovery.json of your last review as enterprise-review/baseline-discovery.json to detect drift.
+          if [ -f enterprise-review/baseline-discovery.json ]; then baseline="--baseline enterprise-review/baseline-discovery.json"; fi
+          python3 .enterprise-experts/skills/enterprise-experts/scripts/enterprise_experts.py gate . $baseline --exclude .enterprise-experts
