@@ -1,8 +1,18 @@
 {
   "name": "enterprise-experts",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Enterprise Experts by Sara: a 23-expert, evidence-based production-readiness review for any software project, with a deterministic Go/No-Go decision.",
-  "author": {"name": "Sara Chamas", "url": "https://github.com/saradchamas"},
+  "author": {
+    "name": "Sara Chamas",
+    "url": "https://github.com/saradchamas"
+  },
   "repository": "https://github.com/saradchamas/Enterprise-Experts-by-Sara",
-  "keywords": ["code-review", "production-readiness", "audit", "security", "devops"]
+  "keywords": [
+    "code-review",
+    "production-readiness",
+    "audit",
+    "security",
+    "devops"
+  ],
+  "license": "MIT"
 }

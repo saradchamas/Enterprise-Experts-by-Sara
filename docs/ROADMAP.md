@@ -1,6 +1,6 @@
 # Roadmap to v1.0
 
-Status as of v0.5.0. Enterprise Experts is one reusable skill with a local engine; it is not a hosted product, and no dashboard, server or database is planned. "Tested" means an automated test or a recorded run exists; anything else is stated as not done.
+Status as of v0.5.1. Enterprise Experts is one reusable skill with a local engine; it is not a hosted product, and no dashboard, server or database is planned. "Tested" means an automated test or a recorded run exists; anything else is stated as not done.
 
 ## What v0.5.0 covers
 
@@ -8,7 +8,7 @@ Status as of v0.5.0. Enterprise Experts is one reusable skill with a local engin
 |---|---|---|
 | Strict scoring, fail-closed decision, risk gates | **Done, tested**; hardened in 0.5.0 after a self-review found a false-pass route | `tests/test_scoring.py`, `tests/test_universal.py` |
 | Evidence engine (IDs, commands, timestamps, versions, commit, branch, hashes, produced files, parallel-safe) | **Done, tested** | Hashes are not signed: integrity detects edits but is not tamper-proof. A reviewer-written probe counts as a run whatever it tests |
-| Policy engine: no unauthorised modification | **Done for tool calls, tested with simulated calls**; chained commands and redirection are checked | Not yet run in a live Claude Code session (`tools/live_guard_test.sh`); pattern matching is not a sandbox; absent in a standalone-skill install |
+| Policy engine: no unauthorised modification | **Done for tool calls, tested with simulated calls**; chained commands and redirection are checked | Not yet run in a live Claude Code session (`python tools/live_guard_test.py`); pattern matching is not a sandbox; absent in a standalone-skill install |
 | Approval records and remediation phase | **Done, tested** | An approval record is an audit entry, not proof of who typed it |
 | Project intake and questions | **Done, tested** | — |
 | Capability matrix (applicable / not applicable / not assessed; checks available / tool missing / unsupported) | **Done, tested** on all 7 fixtures | Decided from the repository; items marked *confirm* depend on the user's answer |
@@ -61,11 +61,9 @@ Eight met (one of them locally only), three partly, one waiting for a tag.
 - **Expert guidance for non-web projects is new and unevaluated** (`references/project-types.md`).
 - **Compatibility is demonstrated only for what was tested.** "Any project" is the design goal, not a tested claim.
 - **Secret and injection detection are pattern-based**: they miss unusual cases and raise false positives.
-- **No licence has been chosen.** Until one is added, nobody else may legally use or change the project. This is the owner's decision.
-
 ## Suggested order
 
-1. Owner decisions: choose a licence; run `tools/live_guard_test.sh` on a logged-in machine; push the first tag when ready.
+1. Owner actions: run `python tools/live_guard_test.py` on a machine where Claude Code is logged in; push the first tag when ready.
 2. Run the skill on a real project of your own and have a person read the report. Fix what that shows.
 3. Decide whether the release gates should vary with project stage or size.
 4. Repeat the evaluation runs on v0.5.0, including one with parallel subagents.

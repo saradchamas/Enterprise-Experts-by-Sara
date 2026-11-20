@@ -94,7 +94,9 @@ def _locked(review_dir):
         try:
             lock.mkdir()
             break
-        except FileExistsError:
+        except (FileExistsError, PermissionError):
+            # PermissionError: on Windows a folder that another process is just removing
+            # cannot be created for a moment. Either way: someone holds the lock, wait.
             try:
                 if time.time() - lock.stat().st_mtime > 120:     # left behind by a crashed run
                     lock.rmdir()
@@ -107,10 +109,14 @@ def _locked(review_dir):
     try:
         yield
     finally:
-        try:
-            lock.rmdir()
-        except OSError:
-            pass
+        for _ in range(40):
+            try:
+                lock.rmdir()
+                break
+            except FileNotFoundError:
+                break
+            except OSError:
+                time.sleep(0.05)
 
 
 def _append(review_dir, build):
@@ -145,7 +151,14 @@ def _save_log(review_dir, log):
     path = Path(review_dir) / LOG_NAME
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(log, indent=2, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(path)
+    for attempt in range(40):
+        try:
+            tmp.replace(path)
+            return
+        except PermissionError:      # Windows: the file is briefly open elsewhere (a reader, a virus scanner)
+            if attempt == 39:
+                raise
+            time.sleep(0.05)
 
 
 def _next_id(log):

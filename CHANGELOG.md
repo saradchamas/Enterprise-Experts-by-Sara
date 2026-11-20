@@ -2,6 +2,14 @@
 
 Versions follow [Semantic Versioning](https://semver.org). Until 1.0.0, minor versions may change the review file formats; each such change is listed under "Breaking".
 
+## [0.5.1] - 2026-11-20
+
+### Added
+- MIT licence (`LICENSE`, also inside the skill folder so a standalone install carries it).
+
+### Fixed
+- The live guard test reported PASS when Claude had not run at all (for example when not logged in), because an untouched file looked like a blocked edit. It is now `tools/live_guard_test.py`, runs on Windows as well, and first does a control run without a review: if Claude cannot edit there, the result is INCONCLUSIVE.
+
 ## [0.5.0] - 2026-11-20
 
 Driven by five evaluation runs of v0.4.0, including a full 23-expert review of this repository (`docs/EVALUATION.md`).
