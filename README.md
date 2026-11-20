@@ -41,7 +41,7 @@ Target states: **Architecture Reviewed · Security Assessed · Testing Evidence-
 
 ```mermaid
 flowchart TD
-    U([You: "Run Enterprise Experts on this project"]) --> D[Discover the project<br/>stacks, checks, capability matrix]
+    U(["You: Run Enterprise Experts on this project"]) --> D[Discover the project<br/>stacks, checks, capability matrix]
     D --> Q[Ask you the intake questions<br/>risk profile and permissions]
     Q --> B[Baseline<br/>build, tests, lint, audit]
     B --> W1
@@ -77,6 +77,113 @@ The decision at the end is made by the engine from the recorded evidence, not by
 5. **Decision.** The engine validates the whole review and returns GO, CONDITIONAL GO or NO-GO. It is fail-closed: a missing area, missing evidence or malformed input makes the review invalid, and an invalid review is NO-GO.
 
 Three modes: **Full** (all 23 areas), **Quick** (8 areas), **Focused** (the areas you name; its decision covers that scope only).
+
+## Architecture
+
+One skill, four parts: instructions Claude reads, two helper agents, a guard that runs before every edit or command, and a small Python engine that records evidence and makes the decision. Nothing is hosted; everything runs on your machine and writes to one review folder.
+
+```mermaid
+flowchart TB
+    YOU([You]) <--> CLAUDE
+
+    subgraph PLUGIN [Enterprise Experts skill and plugin]
+        direction TB
+        CLAUDE[Orchestrator<br/>SKILL.md: phases, questions, rules]
+        REFS[Reference guides<br/>23 expert playbooks, scoring rules,<br/>project types, deployment, AI, visuals]
+        AGENTS[Helper agents<br/>expert-reviewer<br/>independent-reviewer]
+        GUARD[Guard hook<br/>runs before every edit and command]
+        CLAUDE -- reads when needed --> REFS
+        CLAUDE -- delegates expert waves --> AGENTS
+    end
+
+    subgraph ENGINE [Engine: Python standard library only]
+        direction TB
+        CLI[enterprise_experts.py<br/>one command line]
+        DISC[Discover<br/>stacks, capability matrix, graphs]
+        EVID[Evidence<br/>run, note, scan import,<br/>visual compare, benchmarks]
+        SCORE[Decide<br/>validate, score, caps, gates]
+        OUT[Report<br/>HTML, Markdown, XLSX, PDF,<br/>trend, delivery package]
+        CLI --> DISC & EVID & SCORE & OUT
+    end
+
+    subgraph REVIEW [Review folder on your machine]
+        direction TB
+        F1[(intake.json<br/>your answers and permissions)]
+        F2[(evidence-log.json<br/>and captured output)]
+        F3[(findings.json<br/>checks and issues per area)]
+        F4[(scorecard, final report,<br/>delivery package)]
+    end
+
+    PROJECT[(Your project<br/>read-only during assessment)]
+
+    CLAUDE -- runs --> CLI
+    AGENTS -- run --> CLI
+    GUARD -. "allows or blocks" .-> PROJECT
+    GUARD -. "reads review state and approvals" .-> REVIEW
+    DISC -- reads --> PROJECT
+    EVID -- "runs the project's checks" --> PROJECT
+    EVID --> F2
+    SCORE -- reads --> F1 & F2 & F3
+    OUT --> F4
+```
+
+### Engine module graph
+
+How the engine's modules depend on each other. An arrow means "imports". `cli` is left out because it imports nearly everything; a test (`tests/test_readme_graph.py`) fails if this graph stops matching the code.
+
+<!-- module-graph:start -->
+```mermaid
+graph LR
+    subgraph Outputs
+        package; export; report; history
+    end
+    subgraph Decision
+        scoring; intake; state
+    end
+    subgraph Evidence
+        evidence; bench; scanners; visual
+    end
+    subgraph Discovery
+        discovery; graphs; capabilities; adapters; tools
+    end
+    subgraph Safety
+        guard; policy; secrets
+    end
+    areas
+
+    bench --> evidence
+    bench --> policy
+    bench --> secrets
+    capabilities --> areas
+    discovery --> adapters
+    discovery --> evidence
+    discovery --> secrets
+    discovery --> tools
+    evidence --> areas
+    evidence --> policy
+    evidence --> secrets
+    export --> evidence
+    export --> report
+    export --> scoring
+    graphs --> discovery
+    guard --> policy
+    history --> discovery
+    history --> scoring
+    intake --> areas
+    package --> areas
+    package --> export
+    package --> report
+    package --> scoring
+    report --> areas
+    scanners --> evidence
+    scanners --> secrets
+    scoring --> areas
+    scoring --> evidence
+    scoring --> intake
+    state --> areas
+    visual --> evidence
+```
+<!-- module-graph:end -->
 
 ## What the results look like
 
