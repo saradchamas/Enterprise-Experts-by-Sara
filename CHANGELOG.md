@@ -2,6 +2,28 @@
 
 Versions follow [Semantic Versioning](https://semver.org). Until 1.0.0, minor versions may change the review file formats; each such change is listed under "Breaking".
 
+## [0.6.0] - 2026-11-20
+
+### Added
+- **Research and proposals.** `research add|propose|decide|check|log`: sources are pages that were read, with URL and date, and are also written to the evidence log. A proposal (adopt, replace, upgrade, remove or configure a technology, model, MCP server, tool, dataset or practice) is refused unless it names a finding or a stated goal, cites recorded sources and weighs an alternative. Models, MCP servers, tools and datasets need an official source. Sources for fast-moving facts count for 90 days. Approval is recorded with a name and the files the change may touch; `verified` needs a check that passed after the approval. `research-log.md` goes into the delivery package.
+- Intake question `innovation_scan`: whether to look for newer technologies at all, and whether project details may appear in web searches.
+- `references/research-and-innovation.md`.
+- `docs/EVALUATION.md` round 4: the engine on five real open-source projects.
+- `research.json` is protected by the edit guard.
+
+### Fixed (found on real projects)
+- `graph` did not finish on a large project (Django, 7,104 files): the cycle search was exponential. It is now linear and reports one shortest example per group of modules.
+- A dependency graph too large to draw is drawn at a coarser level, with the full edge list in `dependency-edges.csv`.
+- The graph ignored relative imports and `src/` layouts, so a typical Python library had no edges.
+- Manifests, schemas, migrations and HTML under examples, docs and tests folders made libraries look like monorepos with a UI and a database.
+- The `exports` field of `package.json` was read as the Expo framework (and so as a mobile app); `vite` matched `vitest`.
+- `bun.lock` was not recognised as a lockfile.
+- Go tests, `unittest` and the Django test runner were not detected; `unittest.mock` alone no longer counts as unittest.
+- Example and test schemas appeared in the ERD; test-data folders were scanned by `graph`.
+
+### Changed
+- `graph` output: `cycles` holds one example per group, with the group sizes in `cycle_group_sizes`.
+
 ## [0.5.1] - 2026-11-20
 
 ### Added

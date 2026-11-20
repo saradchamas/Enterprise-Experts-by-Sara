@@ -66,9 +66,41 @@ What has actually been measured about the skill, as opposed to its engine's unit
 
 **Honest limits of this round.** One run per case. The reviewers were agents of the same model that wrote the skill, given the answers a user would give; no person judged whether the deliverables were good. Only one of the five projects is real, and it is the skill's own repository. Fixes made in v0.5.0 are covered by tests but have not been through another round of runs.
 
+## Round 4 — the engine on real open-source projects (v0.6.0)
+
+The deterministic engine (`discover`, capability matrix, `graph`, `gate`) was run on shallow clones of five public projects. Nothing in them was executed or changed; no model took part, so this round says nothing about the quality of an expert review.
+
+| Project (commit) | Tracked files | discover | graph | What went wrong before the fixes |
+|---|---|---|---|---|
+| pallets/flask (49943b5) | 236 | 0.2 s | 0.1 s | A library was classed as a monorepo with a UI, a database and Redis, all from `examples/`. The graph had no edges: `src/` layout and relative imports were not followed. The ERD showed a table from an example. |
+| expressjs/express (43fca52) | 216 | 0.2 s | 0.1 s | Classed as having a UI because of HTML in `examples/`. |
+| gin-gonic/gin (0f09c3a) | 130 | 0.2 s | 0.1 s | "Test frameworks: none" with 41 Go test files. (The graph does not read Go; it says so.) |
+| fastapi/full-stack-fastapi-template (77e550a) | 252 | 0.2 s | 0.1 s | Reported the Expo framework and a mobile app: the `exports` field of `package.json` matched "expo". `bun.lock` was not recognised as a lockfile. `from unittest.mock import` was read as the unittest framework. |
+| django/django (c67d872) | 7,104 | 4.8 s | 1.7 s | **`graph` did not finish**: stopped by hand after 9 minutes 53 seconds of CPU. The cycle search listed every distinct cycle, which grows exponentially. Stray `requirements.txt` files under `tests/` and `docs/` were treated as parts of the product. The 1,130-edge diagram was too large for any viewer to draw. |
+
+Times are after the fixes, on the build machine.
+
+**Fixed in v0.6.0, each with a regression test** (`tests/test_real_project_regressions.py`):
+
+1. Cycle detection is now linear (strongly connected components, one shortest example per group). Django: under 2 seconds.
+2. A graph with more than 120 edges is drawn at a coarser level, and the full list goes to `dependency-edges.csv`.
+3. The graph follows relative imports and `src/` layouts.
+4. Manifests, schemas, migrations and HTML under examples, docs and tests folders no longer define what the product is; they are listed in a note.
+5. Framework and tool names match whole names only.
+6. `bun.lock` is a lockfile.
+7. Go tests, `unittest` and the Django test runner are detected; `unittest.mock` alone is not.
+8. Example and test schemas are left out of the ERD.
+
+`gate` failed on the FastAPI template (exit 20) because its committed `.env` holds default credentials. That is a correct detection of what is in the repository; whether it matters is for a reviewer to judge, since the values are placeholders meant to be changed.
+
+**Research workflow, exercised once by hand.** On the same template: the image tags in `compose.yml` were captured as evidence, two official pages were read on 2026-11-20 (the PostgreSQL versioning policy and Docker's build best practices, both through a summarising fetch tool, which the recorded claims say), one proposal was recorded (pin the floating `adminer` image tag), one proposal with no problem behind it was refused by the engine, and for PostgreSQL 18 the result was "supported until November 2030, nothing to propose". This shows the commands work on a real project with real sources. It was not a review, nobody approved or built anything, and no model-driven run of the research workflow has been evaluated.
+
+**Honest limits of this round.** Five projects, all well-maintained open-source libraries or templates, none of them a private business application, none larger than about 7,000 files. Only the engine ran. Projects' own tests were not run. A defect list from five projects is a sample, not a guarantee for the sixth.
+
 ## Not yet evaluated
 
-- A real project that is not this one, and anything large.
+- The full expert review (the model-driven part) on a real project that is not this one, and on anything large. Round 4 covers the engine only.
+- The research workflow in a model-driven run, and a proposal taken from approval through build to verification on a real project.
 - Repeat runs (variance), and a person judging the quality of the deliverables.
 - Whether a genuinely production-ready project reaches GO.
 - `references/project-types.md` and the other guidance added in v0.5.0.

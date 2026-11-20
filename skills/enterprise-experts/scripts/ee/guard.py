@@ -24,7 +24,7 @@ from .policy import check_shell
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 PROTECTED_BRANCHES = {"main", "master", "production", "prod", "release"}
 REVIEW_DIR = "enterprise-review"
-ENGINE_OWNED = {"review-state.json", "evidence-log.json"}
+ENGINE_OWNED = {"review-state.json", "evidence-log.json", "research.json"}
 SAFE_IN_REMEDIATION = re.compile(r"^\s*git\s+(add|commit|switch|checkout\s+-b|worktree\s+add|stash|restore\s+--staged)\b")
 
 

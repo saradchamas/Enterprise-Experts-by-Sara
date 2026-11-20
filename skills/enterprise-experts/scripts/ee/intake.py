@@ -92,6 +92,12 @@ QUESTIONS = [
       why="Nothing is sent to an outside provider without your say; free or cheap models are not assumed safe for private data."),
     q("ai_quality_bar", "How do you judge the AI feature today (test questions, an evaluation set, user feedback)?",
       when="has_ai", experts=[9, 20], why="Model or prompt changes need something to be measured against."),
+    q("innovation_scan", "Besides reviewing what exists, should the team also look for newer technologies, AI models and "
+      "integrations (such as MCP servers) that would help this project, and propose them with sources? "
+      "And may anything about the project be included in web searches?",
+      kind="choice", options=["no", "yes_generic_searches_only", "yes_project_details_allowed", "unknown"], experts=[21, 22],
+      why="Looking things up is optional and costs time; nothing is adopted without your approval, and search terms "
+          "reveal what you are building unless they are kept generic."),
     q("deployment_goals", "For hosting: what matters most (lowest cost, least maintenance, full control), what is the monthly "
       "budget, and who will operate it?", when="deployable", experts=[11, 12],
       why="The deployment recommendation is the simplest option that meets these, not the most powerful."),

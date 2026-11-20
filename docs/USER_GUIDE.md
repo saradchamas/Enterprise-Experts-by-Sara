@@ -107,6 +107,18 @@ After discovery the engine writes `capability-matrix.md`. Each of the 23 areas i
 
 Nothing is sent to an outside AI provider, installed, provisioned or deployed without your explicit approval.
 
+## Research and proposals
+
+Answer yes to the intake question about newer technologies (or just ask "what newer technology, models or MCP servers would help this project?") and the team researches as part of the review. What you get is `research-log.md`: the proposals that hold up, the ones that must not be acted on yet and why, and every source with the date it was read.
+
+- A proposal always names the finding or goal it serves, the pages it rests on, and at least one alternative that was considered. The engine refuses one that does not.
+- A model, MCP server, tool or dataset needs the vendor's or maintainer's own page among its sources.
+- Sources for fast-moving facts count for 90 days. After that the proposal is flagged until the page is read again.
+- Nothing is adopted without your approval. You approve or reject each proposal by name; an approved one is built on a branch and marked verified only after a check passed.
+- You choose whether searches stay generic or may include details of your project. Secrets and personal data never go into a search.
+
+The engine does not browse. The research is done by Claude with the web access your session has; with none, it says so and records no sources.
+
 ## Scanner results
 
 When a supported scanner is installed, its machine-readable output is captured as evidence and normalised:
