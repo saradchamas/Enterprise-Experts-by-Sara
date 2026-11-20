@@ -153,7 +153,7 @@ class State(Tmp):
         state.set_status(self.tmp, 1, "done")
         state.set_status(self.tmp, 6, "in_progress")   # ... and the session dies here
         plan = state.plan(state.load(self.tmp))        # a new session picks it up
-        self.assertEqual((plan["interrupted"], plan["done"], plan["wave"]), ([6], [1], "Foundation"))
+        self.assertEqual((plan["in_progress"], plan["done"], plan["wave"]), ([6], [1], "Foundation"))
         state.set_status(self.tmp, 6, "done")
         self.assertEqual(state.plan(state.load(self.tmp))["ready"], [2])
         for a in (2, 5, 8, 7, 9, 10):

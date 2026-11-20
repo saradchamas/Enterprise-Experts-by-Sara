@@ -20,6 +20,10 @@ from .areas import AREAS
 from .policy import check_command
 from .secrets import mask_text
 
+# Commands that only read files. Capturing their output shows what the files contain
+# (Observed); it does not show that anything works, so it never counts as Verified.
+INSPECTION = re.compile(r"^\s*(?:grep|egrep|fgrep|rg|ag|cat|head|tail|wc|ls|tree|find|stat|file|jq|awk|sed\s+-n|"
+                        r"git\s+(?:ls-files|log|show|status|diff|grep|blame|rev-parse|branch))\b")
 LOG_NAME = "evidence-log.json"
 KINDS = ("command", "observation", "inference")
 ID_RX = re.compile(r"^E-\d{3,}$")
@@ -94,9 +98,11 @@ def _check_area(area):
         raise ValueError(f"area must be 1-23, got {area!r}")
 
 
-def run_command(review_dir, area, title, argv, cwd=".", timeout=900, approved=False):
+def run_command(review_dir, area, title, argv, cwd=".", timeout=900, approved=False, also_areas=()):
     """Run a command (no shell), store its masked output, and append a record."""
     _check_area(area)
+    for extra in also_areas:
+        _check_area(extra)
     if not argv:
         raise ValueError("no command given")
     reason = check_command(argv)
@@ -134,6 +140,8 @@ def run_command(review_dir, area, title, argv, cwd=".", timeout=900, approved=Fa
         "commit": git_commit(cwd), "artifact": f"evidence/{artifact.name}", "sha256": sha256_file(artifact),
         "approved_risky_command": bool(reason),
     }
+    if also_areas:
+        record["also_areas"] = sorted(set(also_areas) - {area})
     log["records"].append(record)
     _save_log(review, log)
     return record
@@ -178,6 +186,8 @@ def record_level(record, review_dir):
             return None, f"artifact was modified after capture: {artifact}"
         if not record.get("command") or not record.get("started_at"):
             return None, "command record lacks command or timestamp"
+        if INSPECTION.match(record["command"]):
+            return "observed", None      # a captured search or listing: what the files say, not proof it works
         return "verified", None
     if kind == "observation":
         if not record.get("location"):

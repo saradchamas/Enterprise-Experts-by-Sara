@@ -4,11 +4,12 @@ It only organises what the review actually produced. Anything the review did not
 produce is listed in MANIFEST.md as not available; nothing is generated to fill a gap.
 """
 import json
+import re
 import shutil
 from pathlib import Path
 
 from . import __version__, report, scoring
-from .areas import AREAS
+from .areas import AREAS, required_areas
 
 OUT = "FINAL-ENGINEERING-DELIVERY"
 # section -> (description, [(glob in review folder, destination subfolder)])
@@ -30,7 +31,7 @@ LAYOUT = [
     ("08-improvements", "Approved changes and their verification", [("change-log.md", ""), ("remediation-plan.md", "")]),
     ("09-documentation", "Documentation deliverable", [("17-documentation.md", "")]),
     ("10-evidence", "Evidence index and captured output", [
-        ("evidence-log.json", ""), ("evidence/*", "execution-logs"), ("intake.json", ""),
+        ("evidence-log.json", ""), ("findings.json", ""), ("evidence/*", "execution-logs"), ("intake.json", ""),
         ("discovery.json", ""), ("discovery.md", ""), ("review-state.json", "")]),
 ]
 NOT_IMPLEMENTED = ["PDF export of the health report", "Excel export", "interactive dashboard", "SBOM of the reviewed project"]
@@ -48,12 +49,24 @@ def build(review_dir):
                 f"Overall: {res['overall'] if res['overall'] is not None else 'n/a'}/100  |  "
                 f"Review date: {res.get('review_date')}  |  Engine {__version__}", "",
                 "Only artifacts this review actually produced are included. Missing items are listed, not invented.", ""]
-    summary = {"sections": {}, "missing": []}
+    summary = {"sections": {}, "missing": [], "out_of_scope": []}
+    try:
+        data = json.loads((review / "findings.json").read_text(encoding="utf-8"))
+        scope = required_areas(data.get("mode"), data.get("scope")) or set(AREAS)
+    except (OSError, ValueError, AttributeError, TypeError):
+        scope = set(AREAS)
+
+    def in_scope(pattern):
+        m = re.match(r"(\d\d)-", pattern)
+        return not m or int(m.group(1)) in scope
     for section, desc, sources in LAYOUT:
         copied, missing = [], []
         for pattern, sub in sources:
             matches = sorted(p for p in review.glob(pattern) if p.is_file())
-            if not matches:
+            if not matches and not in_scope(pattern):
+                summary["out_of_scope"].append(f"{section}/{pattern}")
+                continue
+            if not matches and "*" not in pattern:
                 missing.append(pattern)
             for src in matches:
                 dst = out / section / sub / src.name
@@ -65,6 +78,8 @@ def build(review_dir):
         manifest += [f"- not available: `{m}` (not produced in this review)" for m in missing] + [""]
         summary["sections"][section] = copied
         summary["missing"] += [f"{section}/{m}" for m in missing]
+    if summary["out_of_scope"]:
+        manifest += ["## Outside this review's scope", ""] + [f"- `{x}`" for x in summary["out_of_scope"]] + [""]
     rows = {r["id"]: r for r in res["rows"]}
     manifest += ["## Areas", "", "| # | Area | Status | Final score |", "|---|---|---|---|"]
     manifest += [f"| {a} | {n} | {rows[a]['status'] if a in rows else 'not in this review'} | "

@@ -83,6 +83,16 @@ QUESTIONS = [
       ["yes", "no", UNKNOWN], when="has_paid_services", experts=[12, 2]),
     q("ai_usage", "What does the AI/LLM do here, can users influence the prompt, and what tools/data can it reach?",
       when="has_ai", experts=[2, 12], why="Needed to assess prompt injection, data leakage and inference cost."),
+    q("external_ai_allowed", "May project code or data be sent to third-party AI providers during this review or by the "
+      "product itself? If yes, which providers and which data?", when="has_ai", experts=[2, 14],
+      why="Nothing is sent to an outside provider without your say; free or cheap models are not assumed safe for private data."),
+    q("ai_quality_bar", "How do you judge the AI feature today (test questions, an evaluation set, user feedback)?",
+      when="has_ai", experts=[9, 20], why="Model or prompt changes need something to be measured against."),
+    q("deployment_goals", "For hosting: what matters most (lowest cost, least maintenance, full control), what is the monthly "
+      "budget, and who will operate it?", when="deployable", experts=[11, 12],
+      why="The deployment recommendation is the simplest option that meets these, not the most powerful."),
+    q("ui_run", "How do I run the interface locally (command, URL, a test account without real data) so I can capture real screenshots?",
+      when="has_ui", experts=[13, 17], why="Screenshots are taken from the running app, never mocked."),
     q("ui_audience", "Who uses the interface (devices, languages, RTL/Arabic, accessibility needs)?",
       when="has_ui", experts=[13]),
     q("mobile_release", "Which app stores/platforms do you ship to, and how are builds signed and released?",
@@ -108,6 +118,8 @@ def questions_for(flags=None, mode=None):
     """The questions to ask, given discovery flags (dict of booleans)."""
     flags = dict(flags or {})
     flags["mode_focused"] = mode == "focused"
+    flags["has_ui"] = flags.get("has_ui") or flags.get("has_mobile")
+    flags["deployable"] = any(flags.get(k) for k in ("has_api", "has_ui", "has_database", "has_containers", "has_iac"))
     return [x for x in QUESTIONS if x["when"] is None or flags.get(x["when"])]
 
 

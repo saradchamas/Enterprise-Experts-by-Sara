@@ -9,6 +9,9 @@
   bench     run|compare --review REVIEW      measure before/after and judge the difference against noise
   graph     <project> --out DIR              dependency graph and database ERD (Mermaid) from the code
   package   --review REVIEW                  assemble the Final Engineering Delivery folder
+  capabilities --review REVIEW               which areas, workflows and checks apply to this project
+  scan      import --review REVIEW ...       scanner output (SARIF, npm audit, osv, pip-audit, trivy, gitleaks) -> candidates
+  visual    compare|approve --review REVIEW  real screenshot vs approved baseline
   validate  --review REVIEW                  check findings.json + evidence (fail-closed)
   score     --review REVIEW                  scorecard + GO / CONDITIONAL GO / NO-GO
 """
@@ -17,7 +20,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, bench, discovery, evidence, graphs, intake, package, report, scoring, state
+from . import __version__, bench, capabilities, discovery, evidence, graphs, intake, package, report, scanners, scoring, state, visual
 from .areas import AREAS
 
 
@@ -36,6 +39,9 @@ def cmd_discover(a):
         out.mkdir(parents=True, exist_ok=True)
         (out / "discovery.json").write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
         (out / "discovery.md").write_text(md, encoding="utf-8")
+        matrix = capabilities.build(d)
+        (out / "capability-matrix.json").write_text(json.dumps(matrix, indent=2), encoding="utf-8")
+        (out / "capability-matrix.md").write_text(capabilities.to_markdown(matrix), encoding="utf-8")
     print(md)
     return 0
 
@@ -83,7 +89,7 @@ def cmd_state(a):
 def cmd_evidence(a):
     if a.action == "run":
         rec = evidence.run_command(a.review, a.area, a.title, a.command, cwd=a.cwd, timeout=a.timeout,
-                                   approved=a.approved)
+                                   approved=a.approved, also_areas=a.also)
     elif a.action == "note":
         rec = evidence.add_note(a.review, a.area, a.title, a.kind, a.detail, a.location, a.project)
     else:
@@ -118,7 +124,7 @@ def cmd_bench(a):
 
 def cmd_graph(a):
     res = graphs.write(a.project, a.out, a.depth)
-    _out({"written": res["written"], "modules_edges": len(res["dependency"]["edges"]),
+    _out({"written": res["written"], "skipped": res["skipped"], "modules_edges": len(res["dependency"]["edges"]),
           "cycles": res["dependency"]["cycles"], "tables": sorted(res["database"]["tables"])})
     return 0
 
@@ -126,6 +132,34 @@ def cmd_graph(a):
 def cmd_package(a):
     _out(package.build(a.review))
     return 0
+
+
+def cmd_capabilities(a):
+    disc = Path(a.review) / "discovery.json"
+    if not disc.exists():
+        raise ValueError("run `discover <project> --out <review>` first")
+    matrix = capabilities.build(json.loads(disc.read_text(encoding="utf-8")))
+    print(json.dumps(matrix, indent=2) if a.json else capabilities.to_markdown(matrix))
+    return 0
+
+
+def cmd_scan(a):
+    res = scanners.import_scan(a.review, a.evidence, a.file)
+    _out({k: res[k] for k in ("source", "format", "count", "by_severity", "note")})
+    for c in res["candidates"][:a.show]:
+        print(f"- [{c['severity']}] {c['title']} | {c['package'] or c['location'] or ''} | {c['rule'] or ''}")
+    return 0
+
+
+def cmd_visual(a):
+    if a.action == "approve":
+        _out(visual.approve(a.review, a.name, a.by, a.baselines, a.project))
+        return 0
+    if not a.image:
+        raise ValueError("visual compare needs --image <png captured from the running app>")
+    res = visual.compare(a.review, a.name, a.image, a.baselines, a.threshold)
+    _out(res)
+    return {"match": 0, "no_baseline": 10, "changed": 20}[res["verdict"]]
 
 
 def cmd_validate(a):
@@ -182,6 +216,8 @@ def build_parser():
     s.add_argument("--timeout", type=int, default=900)
     s.add_argument("--approved", action="store_true",
                    help="the user explicitly approved this risky command")
+    s.add_argument("--also", type=int, nargs="*", default=[],
+                   help="for 'run': other areas that may cite this same record")
     s.add_argument("--kind", choices=["observation", "inference"])
     s.add_argument("--detail", default="")
     s.add_argument("--location")
@@ -223,6 +259,30 @@ def build_parser():
     s = sub.add_parser("package")
     s.add_argument("--review", required=True)
     s.set_defaults(fn=cmd_package)
+
+    s = sub.add_parser("capabilities", help="which areas, workflows and checks apply to this project")
+    s.add_argument("--review", required=True)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_capabilities)
+
+    s = sub.add_parser("scan", help="turn recorded scanner output into candidate findings")
+    s.add_argument("action", choices=["import"])
+    s.add_argument("--review", required=True)
+    s.add_argument("--evidence", help="id of the evidence record that captured the scanner's output")
+    s.add_argument("--file", help="or: a results file inside the review folder (SARIF/JSON)")
+    s.add_argument("--show", type=int, default=20)
+    s.set_defaults(fn=cmd_scan)
+
+    s = sub.add_parser("visual", help="compare a real screenshot with its approved baseline")
+    s.add_argument("action", choices=["compare", "approve"])
+    s.add_argument("--review", required=True)
+    s.add_argument("--name", required=True)
+    s.add_argument("--image")
+    s.add_argument("--baselines", help="baseline folder (default: <review>/../visual-baselines)")
+    s.add_argument("--threshold", type=float, default=0.1, help="allowed percent of changed pixels")
+    s.add_argument("--by")
+    s.add_argument("--project")
+    s.set_defaults(fn=cmd_visual)
 
     s = sub.add_parser("validate")
     s.add_argument("--review", required=True)
