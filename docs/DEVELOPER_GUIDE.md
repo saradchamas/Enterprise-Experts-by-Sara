@@ -4,7 +4,8 @@
 
 ```
 .claude-plugin/            plugin.json, marketplace.json
-agents/expert-reviewer.md  read-only subagent for one expert area
+agents/                    expert-reviewer, independent-reviewer (both read-only)
+hooks/                     hooks.json + guard.py (PreToolUse edit/command guard)
 skills/enterprise-experts/
   SKILL.md                 the orchestrator's workflow
   references/              23 expert specifications, intake, scoring, companion skills
@@ -35,6 +36,11 @@ A skill must work when only its own folder is installed. So the engine sits in `
 | `scoring.py` | Validation and the decision. |
 | `state.py` | Resumable review state and wave planning. |
 | `report.py` | Markdown, JSON and HTML scorecards. |
+| `guard.py` | Decides whether an edit or command is allowed while a review is open; called by the plugin hook. |
+| `bench.py` | Repeated measurement and before/after verdicts. |
+| `graphs.py` | Dependency graph and ERD from code, as Mermaid. |
+| `package.py` | The Final Engineering Delivery folder. |
+| `tools.py` | Optional analysis tools and their availability. |
 | `cli.py` | Argument parsing only. |
 
 Data flow: `discover` → `questions`/`intake.json` → `evidence-log.json` + `findings.json` → `validate` → `score` → scorecards.
@@ -56,6 +62,7 @@ claude plugin validate .                      # needs the Claude Code CLI
 |---|---|
 | `tests/test_scoring.py` | Decision regressions: every way an incomplete, malformed or unproven review could wrongly become GO. |
 | `tests/test_engine.py` | Evidence capture, masking, command policy, intake, state, adapters on the fixtures. |
+| `tests/test_improvement.py` | Guard decisions and the hook script, approvals, benchmark verdicts, diagrams, packaging, prompt-injection scan. |
 | `tests/test_cli_e2e.py` | Whole reviews through the real CLI; interrupted runs; skill package consistency (all 23 experts specified, referenced files exist, versions agree, standard library only). |
 
 Fixtures in `tests/fixtures/`: `healthy-node`, `flawed-node`, `monorepo`, `python-fastapi` (AI app), `go-service`, `infra-only`, `unsupported-elixir`.

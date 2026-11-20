@@ -23,7 +23,7 @@ claude plugin install enterprise-experts@enterprise-experts-by-sara
 claude plugin details enterprise-experts@enterprise-experts-by-sara
 ```
 
-`details` should list one skill (`enterprise-experts`) and one agent (`expert-reviewer`).
+`details` should list one skill (`enterprise-experts`), two agents (`expert-reviewer`, `independent-reviewer`) and one hook (`PreToolUse`). The hook runs `python3`; on Windows make sure `python3` is on the PATH, or the guard will not run.
 
 Uninstall:
 
@@ -32,7 +32,7 @@ claude plugin uninstall enterprise-experts@enterprise-experts-by-sara
 claude plugin marketplace remove enterprise-experts-by-sara
 ```
 
-Tested: install, details and uninstall from a local clone (Linux, Claude Code CLI). Installing straight from GitHub works only once this version is on the default branch and has not been tested yet.
+Tested: install, details and uninstall from a local clone (Linux, Claude Code CLI). Installing straight from GitHub has not been tested yet.
 
 ## Option 2: standalone skill
 
@@ -55,8 +55,6 @@ The first prints the version; the second should end with `OK`.
 
 | Platform | Engine and tests | Docker runner |
 |---|---|---|
-| Linux | Tested locally (Python 3.13); CI also runs 3.10 | Tested locally |
-| macOS | Covered by the CI matrix | Not tested |
-| Windows | Covered by the CI matrix | Not tested; use Docker Desktop with WSL2 and run the commands from the WSL shell |
-
-"Covered by the CI matrix" means the workflow is configured to run there; check the latest CI run for the actual result.
+| Linux | Tested locally and in CI (Python 3.10, 3.13) | Tested locally and in CI |
+| macOS | Passing in CI (Python 3.10, 3.13) | Not tested |
+| Windows | Passing in CI (Python 3.10, 3.13) since the console fix in 0.3.0 | Not tested; use Docker Desktop with WSL2 and run the commands from the WSL shell |

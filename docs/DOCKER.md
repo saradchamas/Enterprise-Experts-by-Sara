@@ -24,7 +24,7 @@ The container runs as user 10001. On Linux, make the reports folder writable for
 AUDIT_UID=$(id -u) AUDIT_GID=$(id -g) PROJECT_DIR=/path/to/project docker compose run --rm audit
 ```
 
-Build without Compose: `docker build -f docker/Dockerfile -t enterprise-experts:0.2.0 .`
+Build without Compose: `docker build -f docker/Dockerfile -t enterprise-experts:0.3.0 .`
 
 ## Isolation
 
