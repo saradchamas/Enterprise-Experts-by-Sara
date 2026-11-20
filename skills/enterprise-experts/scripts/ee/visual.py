@@ -13,6 +13,7 @@ import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import evidence
 from .evidence import git_commit, sha256_file
 
 NAME_RX = re.compile(r"^[a-z0-9][a-z0-9._-]{0,60}$")
@@ -91,13 +92,41 @@ def diff_ratio(a_path, b_path, tolerance=16):
     return changed / (wa * ha), None
 
 
+def write_png(path, width, height, rows):
+    """Write 8-bit RGB rows as a PNG (used for the difference image)."""
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+    raw = b"".join(b"\x00" + r for r in rows)
+    Path(path).write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+                           + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b""))
+
+
+def diff_image(a_path, b_path, out_path, tolerance=16):
+    """A picture of where two same-sized captures differ: the baseline faded to grey, changed pixels in red."""
+    w, h, ca, ra = read_png(a_path)
+    _w, _h, cb, rb = read_png(b_path)
+    rows = []
+    for row_a, row_b in zip(ra, rb, strict=True):
+        out = bytearray(w * 3)
+        for x in range(w):
+            pa, pb = row_a[x * ca:x * ca + ca], row_b[x * cb:x * cb + cb]
+            if any(abs(pa[k] - pb[k]) > tolerance for k in range(min(ca, cb))):
+                out[x * 3:x * 3 + 3] = b"\xe0\x10\x10"
+            else:
+                grey = 255 - (255 - (sum(pa[:3]) // min(ca, 3) if ca >= 3 else pa[0])) // 3
+                out[x * 3:x * 3 + 3] = bytes((grey, grey, grey))
+        rows.append(bytes(out))
+    write_png(out_path, w, h, rows)
+
+
 def _dirs(review_dir, baselines):
     review = Path(review_dir)
     return review, Path(baselines) if baselines else review.parent / "visual-baselines"
 
 
-def compare(review_dir, name, image, baselines=None, threshold=0.1, tolerance=16):
-    """Compare a fresh capture with the approved baseline. threshold is in percent of pixels."""
+def compare(review_dir, name, image, baselines=None, threshold=0.1, tolerance=16, area=13):
+    """Compare a fresh capture with the approved baseline. threshold is in percent of pixels.
+    Every comparison is kept as its own evidence record, so a verdict can be cited by ID."""
     if not NAME_RX.match(name or ""):
         raise ValueError("screenshot name must be lowercase letters, digits, dot, dash or underscore")
     review, base_dir = _dirs(review_dir, baselines)
@@ -122,10 +151,20 @@ def compare(review_dir, name, image, baselines=None, threshold=0.1, tolerance=16
             pct = round(ratio * 100, 4)
             result.update(changed_pct=pct, verdict="match" if pct <= threshold else "changed",
                           reason=f"{pct}% of pixels differ" + ("" if pct <= threshold else f" (allowed: {threshold}%)"))
+            if pct > threshold:
+                diff_image(baseline, current, shots / f"{name}.diff.png", tolerance)
+                result["diff_image"] = f"screenshots/{name}.diff.png"
         meta = base_dir / f"{name}.json"
         if meta.exists():
             result["baseline"] = json.loads(meta.read_text(encoding="utf-8"))
     (shots / f"{name}.compare.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    n = len(list(shots.glob(f"{name}.compare-*.json"))) + 1
+    kept = shots / f"{name}.compare-{n:02d}.json"
+    kept.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    rec = evidence.add_artifact(review, area, f"visual compare {name}: {result['verdict']}",
+                                f"visual compare --name {name} (capture sha256 {result['sha256'][:12]})", kept,
+                                exit_code=0 if result["verdict"] == "match" else 1)
+    result["evidence"] = rec["id"]
     return result
 
 
@@ -143,4 +182,7 @@ def approve(review_dir, name, approved_by, baselines=None, project=None):
             "approved_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "commit": git_commit(project) if project else None}
     (base_dir / f"{name}.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    note = evidence.add_note(review, 13, f"visual baseline approved: {name}", "inference",
+                             f"approved by {meta['approved_by']}; baseline sha256 {meta['sha256'][:12]}")
+    meta["evidence"] = note["id"]
     return meta

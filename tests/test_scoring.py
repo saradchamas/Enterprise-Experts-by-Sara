@@ -231,7 +231,7 @@ class FindingsPolicy(Base):
         def observed_only(d, r):
             area(d, 2)["findings"] = [finding("SEC-1", "critical", self.ev(d, 2), "fixed",
                                               verification=area(d, 2)["checks"][1]["evidence"])]
-        self.assertInvalid(self.run_with(observed_only), "'fixed' needs a re-check that was actually run")
+        self.assertInvalid(self.run_with(observed_only), "'fixed' needs a re-check that ran and succeeded")
 
         def verified(d, r):
             rec = evidence.run_command(r, 2, "re-test injection", OK_CMD)

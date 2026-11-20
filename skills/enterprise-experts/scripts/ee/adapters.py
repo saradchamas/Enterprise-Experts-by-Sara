@@ -6,6 +6,7 @@ its limitations. Anything else is reported as not available, with a reason, so
 the orchestrator records the check as Not assessed instead of guessing.
 """
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -59,13 +60,14 @@ def _node(d, root):
     else:
         cmds["typecheck"], missing["typecheck"] = None, "not a TypeScript project"
     if has_lock:
-        cmds["audit"] = {"npm": ["npm", "audit", "--omit=dev"], "pnpm": ["pnpm", "audit", "--prod"],
-                         "yarn": ["yarn", "audit"], "bun": ["npm", "audit", "--omit=dev"]}[pm]
+        cmds["audit"] = {"npm": ["npm", "audit", "--omit=dev", "--json"], "pnpm": ["pnpm", "audit", "--prod", "--json"],
+                         "yarn": ["yarn", "audit", "--json"], "bun": ["npm", "audit", "--omit=dev", "--json"]}[pm]
     else:
         cmds["audit"], missing["audit"] = None, "the dependency audit needs a lockfile, and there is none"
     return {"adapter": "node", "label": f"JavaScript/TypeScript ({pm})", "tools": ["node", pm], "commands": cmds,
             "unavailable": missing,
-            "limitations": ["Tests and audit need dependencies installed and (for audit) network access."],
+            "limitations": ["Tests need the project's dependencies installed, if it has any.",
+                            "The audit sends dependency names and versions to the package registry."],
             "workspaces": bool(pkg.get("workspaces"))}
 
 
@@ -76,19 +78,33 @@ def _python(d, root):
     cmds, missing = {"install": None, "build": None, "typecheck": None}, {
         "install": "installing Python dependencies changes the environment; do it in a virtualenv with approval",
         "build": "no build step for this stack"}
-    cmds["test"] = ["python", "-m", "pytest", "-q"] if has_tests else None
+    test_dir = next((n for n in ("tests", "test") if (d / n).is_dir()), None)
+    if "pytest" in text:
+        cmds["test"] = ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    elif test_dir:
+        cmds["test"] = ["python", "-m", "unittest", "discover", "-s", test_dir, "-t", "."]
+    else:
+        cmds["test"] = None
     if not has_tests:
         missing["test"] = "no tests directory and pytest is not a dependency"
-    cmds["lint"] = ["ruff", "check", "."] if "ruff" in text else (["flake8"] if "flake8" in text else None)
+    cmds["lint"] = ["ruff", "check", "--no-cache", "."] if "ruff" in text else (["flake8"] if "flake8" in text else None)
     if not cmds["lint"]:
         missing["lint"] = "no linter configured"
     if "mypy" in text:
-        cmds["typecheck"] = ["mypy", "."]
+        cmds["typecheck"] = ["mypy", "--cache-dir", os.devnull, "."]
     else:
         missing["typecheck"] = "no type checker configured"
-    cmds["audit"] = ["pip-audit"]
+    req = next((f for f in ("requirements.txt", "requirements.lock", "requirements-prod.txt") if (d / f).exists()), None)
+    if req:
+        cmds["audit"] = ["pip-audit", "-r", req, "-f", "json"]
+    else:
+        cmds["audit"] = None
+        missing["audit"] = ("no requirements file to audit: a bare `pip-audit` would audit this machine's own "
+                            "packages, not the project's. Export a requirements or lock file first")
     return {"adapter": "python", "label": "Python", "tools": ["python", "pip-audit"], "commands": cmds,
-            "unavailable": missing, "limitations": ["Tests need the project's dependencies installed."]}
+            "unavailable": missing,
+            "limitations": ["Tests need the project's dependencies installed.",
+                            "pip-audit sends package names and versions to a public advisory service."]}
 
 
 def _simple(adapter, label, tools, cmds, limitations=(), unavailable=None):

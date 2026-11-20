@@ -38,7 +38,7 @@ If a session is interrupted, start a new one in the same project and ask to cont
 
 | Command | Purpose |
 |---|---|
-| `EE discover <project> [--out <review>]` | Inventory. Read-only. |
+| `EE discover <project> [--out <review>] [--exclude DIR ...]` | Inventory. Read-only. Test-data folders (`fixtures`, `testdata`) are left out. |
 | `EE capabilities --review <review> [--json]` | Which areas, workflows and run-based checks apply to this project. |
 | `EE questions --review <review> [--mode full\|quick\|focused]` | Intake questions for this project, as JSON. |
 | `EE intake --review <review>` | Validate `intake.json`; print the risk profile. |
@@ -59,6 +59,10 @@ If a session is interrupted, start a new one in the same project and ask to cont
 | `EE visual approve --review <review> --name N --by NAME` | Make the current capture the approved baseline. |
 | `EE graph <project> --out <dir> [--depth 2]` | Dependency graph and database ERD (Mermaid). |
 | `EE package --review <review>` | Build `FINAL-ENGINEERING-DELIVERY/`. |
+| `EE export --review <review> [--format xlsx\|pdf\|all]` | `report.xlsx` and `report.pdf`. The PDF is a plain-text summary and cannot show Arabic. |
+| `EE trend --review <review> --previous <earlier review>` | Scores and findings compared with an earlier review; exit 20 on a regression. |
+| `EE gate <project> [--baseline discovery.json] [--exclude DIR ...]` | Checks that need no AI model, for CI and schedules; exit 20 on failure. |
+| `EE evidence share --review <review> --id E-0xx --also N ...` | Let other areas cite an existing record. |
 | `EE validate --review <review>` | Validate only. |
 | `EE score --review <review> [--json] [--no-write]` | Validate, decide, write the scorecards. |
 
@@ -125,11 +129,17 @@ EE visual compare --review review --name home-desktop --image shot.png     # exi
 
 Baselines live in `enterprise-review/visual-baselines/` so later reviews compare against them.
 
+## Between reviews
+
+- Keep earlier review folders. `EE trend` shows what improved, what is new and what regressed.
+- `assets/ci/enterprise-experts-gate.yml` in the skill is a workflow you can copy into a project to run `EE gate` on pull requests and on a schedule. It needs no AI model and no secrets. A scheduled full expert review is not provided: the review needs Claude and your answers.
+
 ## Reading the scorecard
 
 - **Expert score** is what the expert proposed; **Final score** is after caps.
 - **Evidence basis** says whether anything was actually run for that area. "Observed only" means the area was judged by reading; it is capped at 75.
 - **Blockers** are the reasons for NO-GO. **Conditions** are what stands between CONDITIONAL GO and GO.
+- **How to read this result** appears when the label alone could mislead, for example a NO-GO with no serious finding (things are missing, nothing dangerous is live) or a prototype held to release gates.
 - "INVALID REVIEW" lists what is missing or inconsistent. It is not a judgment of your project; it means the review itself cannot support a decision yet.
 
 The full rules are in the [scoring specification](../skills/enterprise-experts/references/evidence-and-scoring.md).

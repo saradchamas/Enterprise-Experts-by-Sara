@@ -19,8 +19,9 @@ ALWAYS = {1: "every project has a structure to review", 2: "every project has an
 
 def build(discovery):
     f = discovery.get("flags", {})
+    # A Dockerfile alone does not make a library a service.
     service = f.get("has_api") or f.get("has_ui") or f.get("has_mobile") or f.get("has_database") \
-        or f.get("has_containers") or f.get("has_data_pipeline")
+        or f.get("has_data_pipeline")
     deployable = service or f.get("has_iac")
     infra_only = f.get("infrastructure_only")
     areas = {}
@@ -67,6 +68,7 @@ def build(discovery):
     put(20, "applicable", "a product people use: usage can be measured") if (f.get("has_ui") or f.get("has_mobile") or f.get("has_api")) \
         else put(20, "not_applicable", "no product surface to measure", True)
 
+    unused_ai = [x for x in discovery.get("ai_libraries", []) if x in discovery.get("declared_not_used", [])]
     checks = []
     for s in discovery.get("stacks", []):
         tools_ok = all(s.get("prerequisites", {}).values())
@@ -86,10 +88,15 @@ def build(discovery):
 
     workflows = {
         "ai_engineering": {"active": bool(f.get("has_ai")),
-                           "reason": "AI libraries found: " + ", ".join(discovery.get("ai_libraries", []))
-                           if f.get("has_ai") else "no AI/LLM usage found; do not introduce AI unless the user asks"},
+                           "reason": "AI libraries imported in the code: " + ", ".join(
+                               x for x in discovery.get("ai_libraries", []) if x not in unused_ai)
+                           if f.get("has_ai") else
+                           ("an AI library is declared (" + ", ".join(unused_ai) + ") but no code uses it: ask the user "
+                            "before treating this as an AI project" if unused_ai else
+                            "no AI/LLM usage found; do not introduce AI unless the user asks")},
         "deployment_advisor": {"active": bool(deployable),
-                               "reason": "the project is deployable" if deployable else "nothing deployable found"},
+                               "reason": ("available, but run it only if hosting is unsettled, a problem, or the user asks"
+                                          if deployable else "nothing deployable found")},
         "visual_documentation": {"active": bool(f.get("has_ui") or f.get("has_mobile")),
                                  "reason": "a user interface exists: capture real screenshots if it can be run"
                                  if (f.get("has_ui") or f.get("has_mobile")) else "no interface to capture"},

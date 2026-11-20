@@ -23,7 +23,7 @@ Check compatibility before recommending: a fix written for a newer major version
 
 ## The loop
 
-1. **Baseline.** Establish a reproducible measurement before touching anything: the failing test, the vulnerable request, the benchmark (`EE bench run --label baseline`).
+1. **Baseline.** Establish a reproducible measurement before touching anything: the failing test, the vulnerable request, the benchmark. For a problem found by reading, write a probe that demonstrates it (see `references/project-types.md`, "Reviewer-written checks") and keep it in `<review>/probes/`, outside the project, so the identical script runs before and after. Agree the acceptance criterion now and record it with the baseline: `EE bench run --label baseline --max-regression 20 --min-abs-change 0.5 --workload <script> ...`. The thresholds are stored and cannot be changed once the candidate has been measured.
 2. **Identify** the cause and record the evidence.
 3. **Research** compatible solutions (see Source above).
 4. **Propose** the smallest change that solves it. Small changes can be reviewed, measured and reverted.
@@ -33,6 +33,21 @@ Check compatibility before recommending: a fix written for a newer major version
 8. **Compare** (`EE bench compare`). The engine calls a change an improvement only when the difference is larger than the run-to-run noise and meets the agreed threshold. If runs failed, or the command, metric or environment differed, the comparison is refused.
 9. **Check for regressions**: the full test suite, and a second look at security and cost.
 10. **Keep or revert.** Keep the change only if the acceptance criterion passed. Otherwise revert it, or leave the finding open and report the change as unproven. Never describe an unmeasured change as an improvement.
+
+### When the goal is not speed
+
+For a performance change the criterion is "improved". For a correctness or security fix, performance is a guard, not the goal: the fix is expected to cost something. Agree beforehand how much slower is acceptable, in absolute terms that matter to the project as well as in percent (a function that takes 35 nanoseconds can double without anyone noticing).
+
+If the fix is proven correct and the guard fails, that is a decision for the user, not a failure to hide: set the finding to `pending_decision` with a `note` giving the numbers and the choice (keep, revert, or rework). It stays unresolved for the scorecard until they decide.
+
+### Scope of an approval
+
+- An approval covers the paths it names. Documentation, changelog and diagrams that the change makes stale are part of the change: ask for them to be included in the approval, or list them as follow-up.
+- If the approved work makes another finding untrue as a by-product (new tests end "no test loads the code"), you may mark that finding `fixed` with its own verification run, and say in the change log that it was a by-product.
+- Do not widen a fix beyond what was approved (renaming an interface, adding validation nobody asked for). If the fix needs it, say so and ask.
+- One commit per approved fix. When two fixes touch the same file, check that each can be reverted alone, and say so if it cannot.
+- Evidence records the commit and whether there were uncommitted changes. Re-run the verifying checks after committing, so the evidence describes the commit you are handing over.
+- After remediation the scorecard describes the fix branch, not the default branch. Say which commit each scorecard refers to; `scorecard-before-remediation.md` is kept automatically when the remediation phase opens.
 
 ### Benchmarks that mean something
 
