@@ -109,7 +109,7 @@ class EndToEnd(unittest.TestCase):
         cli("state", "set", "--review", self.review, "--area", 1, "--status", "in_progress")
         self.assertEqual(cli("score", "--review", self.review).returncode, 2)
         plan = json.loads(cli("state", "show", "--review", self.review).stdout)["plan"]
-        self.assertEqual(plan["interrupted"], [1])
+        self.assertEqual(plan["in_progress"], [1])
         self.assertEqual(cli("state", "init", "--review", self.review, "--mode", "full").returncode, 2)
 
     def test_risky_command_is_refused(self):

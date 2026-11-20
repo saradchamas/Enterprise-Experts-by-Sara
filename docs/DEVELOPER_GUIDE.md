@@ -41,6 +41,9 @@ A skill must work when only its own folder is installed. So the engine sits in `
 | `graphs.py` | Dependency graph and ERD from code, as Mermaid. |
 | `package.py` | The Final Engineering Delivery folder. |
 | `tools.py` | Optional analysis tools and their availability. |
+| `capabilities.py` | Capability matrix: applicable areas, workflows and run-based checks. |
+| `scanners.py` | Scanner output (SARIF and tool JSON) to candidate findings. |
+| `visual.py` | PNG decoding and screenshot comparison against approved baselines. |
 | `cli.py` | Argument parsing only. |
 
 Data flow: `discover` → `questions`/`intake.json` → `evidence-log.json` + `findings.json` → `validate` → `score` → scorecards.
@@ -63,6 +66,7 @@ claude plugin validate .                      # needs the Claude Code CLI
 | `tests/test_scoring.py` | Decision regressions: every way an incomplete, malformed or unproven review could wrongly become GO. |
 | `tests/test_engine.py` | Evidence capture, masking, command policy, intake, state, adapters on the fixtures. |
 | `tests/test_improvement.py` | Guard decisions and the hook script, approvals, benchmark verdicts, diagrams, packaging, prompt-injection scan. |
+| `tests/test_universal.py` | Capability matrix on every fixture, scanner importers (real npm audit and pip-audit output), PNG decoder and visual regression (real browser screenshots), deployment profile, AI and deployment questions. |
 | `tests/test_cli_e2e.py` | Whole reviews through the real CLI; interrupted runs; skill package consistency (all 23 experts specified, referenced files exist, versions agree, standard library only). |
 
 Fixtures in `tests/fixtures/`: `healthy-node`, `flawed-node`, `monorepo`, `python-fastapi` (AI app), `go-service`, `infra-only`, `unsupported-elixir`.

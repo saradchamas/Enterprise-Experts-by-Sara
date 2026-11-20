@@ -60,10 +60,11 @@ def set_status(review_dir, area, status, note=None):
 
 def plan(state):
     """Dependency-aware view: the areas that can run now are the unfinished ones in
-    the earliest wave that still has work. Areas left 'in_progress' were interrupted."""
+    the earliest wave that still has work. `in_progress` lists areas being worked on; if you
+    are starting a new session and did not set them yourself, they were interrupted: resume them."""
     scope = {int(a) for a in state["areas"]}
     st = {int(a): v["status"] for a, v in state["areas"].items()}
-    out = {"ready": [], "interrupted": [], "blocked": [], "done": [], "failed": [], "wave": None}
+    out = {"ready": [], "in_progress": [], "blocked": [], "done": [], "failed": [], "wave": None}
     earlier_open = False
     for wave, ids in WAVES:
         mine = [a for a in ids if a in scope]
@@ -74,7 +75,7 @@ def plan(state):
             elif earlier_open:
                 out["blocked"].append(a)
             elif st[a] == "in_progress":
-                out["interrupted"].append(a)
+                out["in_progress"].append(a)
             elif st[a] == "failed":
                 out["failed"].append(a)
             else:

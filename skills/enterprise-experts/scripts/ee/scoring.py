@@ -81,8 +81,9 @@ def _refs(value, where, errors, ev, area_id, levels, require=True):
         if level is None:
             errors.append(f"{where}: evidence {eid!r} is not usable ({problem})")
             continue
-        rec_area = ev.by_id[eid].get("area")
-        if rec_area != area_id and area_id not in MAY_REUSE_EVIDENCE:
+        rec = ev.by_id[eid]
+        rec_area = rec.get("area")
+        if area_id not in [rec_area, *rec.get("also_areas", [])] and area_id not in MAY_REUSE_EVIDENCE:
             errors.append(f"{where}: evidence {eid} was recorded for area {rec_area}, not area {area_id}")
             continue
         levels.add(level)

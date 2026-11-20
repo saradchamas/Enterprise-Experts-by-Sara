@@ -49,3 +49,20 @@ How to use this list:
 | [Code Review](https://claude.com/marketplace/plugins) | Plugin | Review changes for quality and defects. |
 
 The shared-foundation ideas are already built into this skill's workflow: question requirements before building (grill-me), plan before changing (writing-plans), investigate before fixing (systematic-debugging), tests guide changes (test-driven-development), and evidence before claiming completion (verification-before-completion).
+
+## Discovering and trusting integrations (skills, plugins, MCP servers, tools)
+
+Recommend an integration only when it materially helps the task in front of you: a scanner for a stack the built-in checks do not cover, an MCP server for a system the review needs to read (repository host, error tracker, monitoring), up-to-date library documentation. Do not list tools for completeness.
+
+Before recommending or using one that is not already installed and trusted by the user, check and report:
+
+| Check | What to look for |
+|---|---|
+| Source | Published by the vendor of the system it connects to, or by a known maintainer? Official or vendor-supported comes first. |
+| Maintenance | Recent releases, open security issues, how many people maintain it. |
+| Version | The exact version or commit you looked at; recommend pinning it. |
+| Permissions | What it can read, write and run; which credentials and scopes it asks for. Prefer read-only, project-scoped access. |
+| Licence | Compatible with how the user will use it. |
+| Data flow | Where it sends data. |
+
+A listing in a marketplace or registry shows that something exists, not that it is safe. Never install a tool, add an MCP server or widen permissions yourself: give the user the name, source, version, what it would be allowed to do and why it helps, and let them decide. If research tools are unavailable, say that the integration's current state could not be checked.

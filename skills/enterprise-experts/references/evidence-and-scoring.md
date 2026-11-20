@@ -9,6 +9,7 @@ You never write an evidence level. You create evidence records, and the engine d
 | Record | How it is created | Level |
 |---|---|---|
 | command | `EE evidence run … -- <command>` ran it and stored the output with timestamp, exit code, tool version, commit and a hash | **Verified** — as long as the stored output still exists and is unmodified |
+| command that only reads files | the same, where the command is a search or listing (`grep`, `rg`, `cat`, `ls`, `find`, `wc`, `git ls-files`, `git log` and similar) | **Observed** — it shows what the files contain, not that anything works |
 | observation | `EE evidence note --kind observation --location path:line` | **Observed** |
 | inference | `EE evidence note --kind inference` | **Inferred** |
 
@@ -16,7 +17,8 @@ What each level can prove:
 - **Verified** proves that this command ran and produced this output. It is the only level that can show something *works*: tests pass, a backup restores, a build succeeds, p95 is 840 ms.
 - **Observed** proves what the code or config *says*. Reading a backup cron job shows a backup is configured, not that it restores. Reading a deploy workflow does not show a deployment succeeded.
 - **Inferred** is reasoning from indirect signals. It can support a *finding* (a risk), never a pass.
-- Looking properly and finding nothing is evidence: run the search through `EE evidence run -- grep -rn "helmet\|Content-Security-Policy" src` and cite it.
+- Looking properly and finding nothing is evidence: run the search through `EE evidence run -- grep -rn "helmet\|Content-Security-Policy" src` and cite it. A captured search is Observed. An area whose only evidence is searches has not had anything run, and is capped accordingly.
+- One run can serve several areas: `EE evidence run --area 9 --also 2 5 ...` lets those areas cite the same record instead of repeating the command.
 
 Honest limit: the engine can prove a command ran and what it printed. It cannot judge whether that command was the right test of the claim. Choosing meaningful checks is your job, and the reviewer reading the report can open every evidence file.
 

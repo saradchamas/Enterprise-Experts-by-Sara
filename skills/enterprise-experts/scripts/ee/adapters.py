@@ -58,8 +58,11 @@ def _node(d, root):
         cmds["typecheck"] = ["npx", "--no-install", "tsc", "--noEmit"]
     else:
         cmds["typecheck"], missing["typecheck"] = None, "not a TypeScript project"
-    cmds["audit"] = {"npm": ["npm", "audit", "--omit=dev"], "pnpm": ["pnpm", "audit", "--prod"],
-                     "yarn": ["yarn", "audit"], "bun": ["npm", "audit", "--omit=dev"]}[pm]
+    if has_lock:
+        cmds["audit"] = {"npm": ["npm", "audit", "--omit=dev"], "pnpm": ["pnpm", "audit", "--prod"],
+                         "yarn": ["yarn", "audit"], "bun": ["npm", "audit", "--omit=dev"]}[pm]
+    else:
+        cmds["audit"], missing["audit"] = None, "the dependency audit needs a lockfile, and there is none"
     return {"adapter": "node", "label": f"JavaScript/TypeScript ({pm})", "tools": ["node", pm], "commands": cmds,
             "unavailable": missing,
             "limitations": ["Tests and audit need dependencies installed and (for audit) network access."],

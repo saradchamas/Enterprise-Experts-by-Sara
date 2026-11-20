@@ -1,7 +1,7 @@
 # {NN}. {Area} — {Deliverable name}
 
 **Expert:** {Job title}  |  **Project:** {project}  |  **Date:** {YYYY-MM-DD}
-**Status:** assessed / partial / not_assessed / not_applicable  |  **Score:** {0–100 or n/a}  |  **Evidence basis:** from scorecard (Verified / Observed only / Inferred only)
+**Status:** assessed / partial / not_assessed / not_applicable  |  **Score:** {0–100 or n/a}  |  **Evidence basis:** {leave blank while drafting; the Orchestrator fills it from `EE score`}
 
 ## Summary
 {3–5 sentences: the state of this area, the biggest risk, the most important next step.}

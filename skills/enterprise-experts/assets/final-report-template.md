@@ -22,7 +22,7 @@
 | Monitoring — Configured | | |
 | Deployment — Repeatable | | |
 
-A target is "Proven" only with Verified evidence. Reading the code and finding it plausible is "Partly".
+Rows whose area is outside this review's scope are marked "➖ Not in scope", not left to look like a pass. A target is "Proven" only with Verified evidence. Reading the code and finding it plausible is "Partly".
 
 ## 3. Scorecard
 
@@ -56,7 +56,7 @@ A target is "Proven" only with Verified evidence. Reading the code and finding i
 
 ## 8. Plan to reach GO
 
-{The launch-blocker milestone from expert 23: ordered list of items, owner, effort, and the verification that will close each.}
+{In a full review, the launch-blocker milestone from expert 23; in a quick or focused review, written by the Orchestrator from the findings in scope: ordered list of items, owner, effort, and the verification that will close each.}
 
 ## 9. Recommended tooling
 

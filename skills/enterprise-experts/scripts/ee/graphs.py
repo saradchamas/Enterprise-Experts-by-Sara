@@ -158,4 +158,10 @@ def write(root, out_dir, depth=2):
         lines += ["```", ""]
         (out / "database-erd.md").write_text("\n".join(lines), encoding="utf-8")
         written.append("database-erd.md")
-    return {"written": written, "dependency": dep, "database": db}
+    skipped = []
+    if not dep["edges"]:
+        skipped.append("dependency graph: no imports between directories were found "
+                       f"({dep['files_scanned']} Python/JS/TS files scanned), so there is nothing to draw")
+    if not db["tables"]:
+        skipped.append("database ERD: no CREATE TABLE statements or Prisma models found")
+    return {"written": written, "skipped": skipped, "dependency": dep, "database": db}

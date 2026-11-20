@@ -21,11 +21,14 @@ _RULES = [
     (r"\b(shutdown|reboot|mkfs|dd\s+if=)\b|\bchmod\s+-R\b|\bchown\s+-R\b", "system-level change"),
     (r"\bcurl\b.*\s-X\s*(POST|PUT|DELETE|PATCH)\b|\bcurl\b.*\s(-d|--data)\b", "sends a write request to a remote service"),
 ]
+READ_ONLY = {"grep", "egrep", "fgrep", "rg", "cat", "head", "tail", "wc", "ls"}
 _COMPILED = [(re.compile(rx), why) for rx, why in _RULES]
 
 
 def check_command(argv):
     """Return None when the command is allowed, otherwise the reason it needs approval."""
+    if argv and argv[0] in READ_ONLY:   # a search pattern may legitimately contain words like "delete from"
+        return None
     text = " ".join(argv)
     for rx, why in _COMPILED:
         if rx.search(text):
