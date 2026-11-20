@@ -1,0 +1,7 @@
+[project]
+name = "assistant-api"
+version = "0.1.0"
+dependencies = ["fastapi", "openai", "sqlalchemy"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "mypy"]

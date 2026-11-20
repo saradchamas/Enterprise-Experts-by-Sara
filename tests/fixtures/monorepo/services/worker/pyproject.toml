@@ -1,0 +1,7 @@
+[project]
+name = "worker"
+version = "0.1.0"
+dependencies = ["redis"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
