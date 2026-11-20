@@ -94,6 +94,17 @@ Add a `q(...)` entry to `QUESTIONS` in `intake.py`. Use `when="<flag>"` to ask i
 
 Edit its section in the matching `references/experts-*.md`. Each section must keep **Mission**, **Deliverable** and **Checks** (a test checks this for all 23).
 
+## The Lite edition
+
+`directory/enterprise-experts-lite/` is the instructions-only plugin for directories that refuse scripts and hooks. Its `SKILL.md`, scoring rules, research guide, agents, manifest and README are written by hand. The expert guides, templates and the intake question list are generated from the full skill:
+
+```
+python tools/build_lite.py          # after changing a reference file or an intake question
+python tools/build_lite.py --check  # what the test suite runs
+```
+
+If the generator stops because a sentence it rewrites has changed, update that replacement in `tools/build_lite.py`. Nothing in the Lite folder may refer to the engine as something to run; `tests/test_lite_edition.py` enforces that and the directory's file rules.
+
 ## Releasing
 
 1. Update `__version__` in `ee/__init__.py`, `version` in `.claude-plugin/plugin.json`, the image tag in `compose.yaml`, and add a `CHANGELOG.md` entry. A test fails if the first three disagree with the changelog.

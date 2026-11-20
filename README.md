@@ -267,7 +267,7 @@ Each review also produces the expert reports, an evidence log with the captured 
 | The full skill: 23 experts, research, two approved changes | The FastAPI full-stack template | Completed; NO-GO 50/100, 49 findings. The reviewer reported 23 defects and frictions in the skill; the engine bugs among them are fixed |
 | The full skill | This repository | CONDITIONAL GO 73/100; found 5 High issues in the engine, all fixed |
 | Focused and quick reviews, a fix loop, AI and deployment workflows, real screenshots | Small sample projects in `tests/fixtures` | Recorded in the evaluation document |
-| 196 automated tests | The engine | Pass on Linux, macOS and Windows, Python 3.10 and 3.13 |
+| 204 automated tests | The engine | Pass on Linux, macOS and Windows, Python 3.10 and 3.13 |
 
 What this does **not** yet show:
 
@@ -279,9 +279,22 @@ What this does **not** yet show:
 
 The details, including what each run got wrong, are in [docs/EVALUATION.md](docs/EVALUATION.md).
 
-## Status: v0.6.1, not yet v1.0
+## Status: v0.6.2, not yet v1.0
 
 What is implemented and tested, and what is not, is tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Implemented and covered by tests: the decision engine, intake, capability matrix, evidence recording, stack detection (npm, pnpm, yarn, Bun, pip, uv, Go, Java, PHP, Rust, Dart, Ruby, .NET, Terraform), scanner-result import, edit and command guard, before/after benchmarks, diagrams from code, screenshot comparison, research and proposals, delivery packaging, Docker runner and CI. No release has been tagged yet.
+
+## Two editions
+
+| | Full | Lite |
+|---|---|---|
+| Where | This repository (plugin `enterprise-experts`, or the `.skill` file) | `directory/enterprise-experts-lite/` (plugin `enterprise-experts-lite`) |
+| Contents | Skill, Python engine, two agents, edit guard | Skill and two agents: Markdown and JSON only, no scripts, no hooks |
+| Evidence log | Written by the engine, with captured output and hashes | Kept by Claude, by hand |
+| Scores and decision | Computed and validated by the engine | Applied by Claude from the written rules |
+| Unapproved edits | Blocked by a hook | A rule Claude follows |
+| Diagrams from code, image comparison, benchmarks, Excel and PDF | Built in | By hand, or not available |
+
+The Lite edition exists because plugin directories accept scripts and hooks only from verified publishers. It gives the method and the report; it cannot give an independent check that the method was followed, and it says so at the top of every scorecard. Everything in "What it has been tested on" above refers to the full edition. The Lite edition has not been evaluated in a review yet.
 
 ## Install
 

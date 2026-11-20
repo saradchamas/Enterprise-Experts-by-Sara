@@ -2,6 +2,13 @@
 
 Versions follow [Semantic Versioning](https://semver.org). Until 1.0.0, minor versions may change the review file formats; each such change is listed under "Breaking".
 
+## [0.6.2] - 2026-11-20
+
+### Added
+- **Lite edition** in `directory/enterprise-experts-lite/`, for plugin directories that accept only Markdown, JSON, YAML and images from unverified publishers. It has the 23 experts, the intake questions, the evidence and scoring rules, research and the report, with no scripts and no hooks: Claude keeps the evidence log and applies the scoring rules by hand, and every scorecard says that no program checked it.
+- `tools/build_lite.py` generates the Lite edition's shared guidance from the full skill; `--check` and the test suite fail when it is out of date.
+- The Lite plugin is listed in the repository's marketplace file next to the full one.
+
 ## [0.6.1] - 2026-11-20
 
 Driven by a full 23-expert review of an independent real project (`docs/EVALUATION.md`, round 5).
