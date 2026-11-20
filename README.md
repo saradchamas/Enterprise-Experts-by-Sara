@@ -4,6 +4,14 @@
 
 The idea: instead of asking "is my project good?", you run a process that makes Claude **prove every conclusion** — what it checked, what it fixed, what passed, what failed, and what still needs a human.
 
+**What it is:** one Claude skill, an orchestration workflow, and a small Python engine that records evidence and makes the decision. **What it is not:** a new AI model, 23 separate AI models, or a hosted platform. There is no server, dashboard or database; it runs where your project is.
+
+It does three things:
+
+1. **Reviews** the project across 23 areas and scores each one on evidence.
+2. **Researches**, if you want it to: newer technologies, AI models, tools and MCP servers that would help this project, each proposal tied to a problem and to pages that were read, with URL and date.
+3. **Builds** what you approve: fixes and approved proposals go on a branch, and count as done only after a check passed.
+
 > Results are not automatic just because the skill is installed. Claude needs suitable access to the project, tools to run and test it, clear standards, and limited permissions for sensitive operations. The readiness states below are targets, and each one needs evidence or a test result.
 
 ## What you get
@@ -54,8 +62,9 @@ flowchart TD
         W4 --> W5[Synthesis<br/>Documentation, Tech Leadership,<br/>Strategy, Delivery]
     end
 
-    W5 --> P{Fix anything?}
-    P -- "you approve a plan" --> R[Remediation on a branch<br/>measure before and after,<br/>re-check, independent review]
+    W5 --> RS[Research, if you asked for it<br/>dated sources, proposals<br/>tied to a problem]
+    RS --> P{Fix or adopt anything?}
+    P -- "you approve by name" --> R[Work on a branch<br/>measure before and after,<br/>re-check, independent review]
     P -- "assess only" --> S
     R --> S[Engine validates and decides]
     S --> O([Final report and delivery package<br/>GO / CONDITIONAL GO / NO-GO])
@@ -63,6 +72,7 @@ flowchart TD
     E[(Evidence log<br/>every command run and file read)]
     B -. records .-> E
     EXPERTS -. records .-> E
+    RS -. records .-> E
     R -. records .-> E
     E -. "decision is computed from this" .-> S
 ```
@@ -78,7 +88,7 @@ The decision at the end is made by the engine from the recorded evidence, not by
 
 Three modes: **Full** (all 23 areas), **Quick** (8 areas), **Focused** (the areas you name; its decision covers that scope only).
 
-**Beyond reviewing: research and build.** If you say yes at intake, the team also looks for newer technologies, AI models, tools and MCP servers that would help this project. Every proposal must name the problem it solves, cite pages that were read during the review (URL and date), and weigh an alternative; the engine refuses one that does not, and flags sources older than 90 days. You approve or reject each proposal. An approved one is built on a branch and counts as verified only after a check passed afterwards. The research itself is done by Claude with whatever web access your session has; the engine keeps it honest, it does not browse.
+**Beyond reviewing: research and build.** If you say yes at intake, the team also looks for newer technologies, AI models, tools and MCP servers that would help this project. Every proposal must name the problem it solves, cite pages that were read during the review (URL and date), and weigh an alternative; the engine refuses one that does not, and flags sources older than 90 days. You approve, reject or defer each proposal. An approved one is built on a branch and counts as verified only after a check passed afterwards. The research itself is done by Claude with whatever web access your session has; the engine keeps it honest, it does not browse.
 
 ## Architecture
 
@@ -193,9 +203,53 @@ graph LR
 
 ## What the results look like
 
-**The scorecard.** A real one: the skill's full 23-expert review of this repository at v0.4.0, which ended CONDITIONAL GO at 73/100 and found five High issues in the skill itself (all fixed in v0.5.0). It is a screenshot of the HTML scorecard the engine wrote; the [full image](docs/images/scorecard-self-review.png) also shows the conditions.
+**A real review of a real project.** The full skill was run on [fastapi/full-stack-fastapi-template](https://github.com/fastapi/full-stack-fastapi-template) at commit `77e550a`: all 23 experts, research, and two approved changes. The engine's decision was NO-GO at 50/100 with 49 findings (7 High, none Critical). The project's own code was not run and the "owner" answering the questions was simulated, so read it as a demonstration of the workflow, not as a verdict on that project. This is the top of the scorecard the engine wrote:
 
-![Scorecard of the skill's review of its own repository: CONDITIONAL GO, 73 out of 100, with a score, status and evidence basis for each of the 23 areas](docs/images/scorecard-self-review-top.png)
+![Scorecard of the review of the FastAPI full-stack template: NO-GO, 50 out of 100. Each row shows an area's status, score, open High findings, and how many of its checks were actually run](docs/images/scorecard-real-project.png)
+
+Two things on it are worth noticing. The line under the decision says which commits the evidence was recorded at. The last column does not just say "Verified": it says how many of an area's checks rest on something that was run, so a single shared run cannot make a whole area look tested.
+
+**Diagrams from the code.** `graph` draws these from import statements and model definitions; nothing is drawn from memory. This is its output for the same project (one level deeper than the default), including the circular dependency it found between `backend/app` and `backend/app/api`:
+
+```mermaid
+graph LR
+  backend_app["backend/app"] -->|1| backend_app_api["backend/app/api"]
+  backend_app["backend/app"] -->|4| backend_app_core["backend/app/core"]
+  backend_app_alembic["backend/app/alembic"] -->|1| backend_app["backend/app"]
+  backend_app_alembic["backend/app/alembic"] -->|1| backend_app_core["backend/app/core"]
+  backend_app_api["backend/app/api"] -->|6| backend_app["backend/app"]
+  backend_app_api["backend/app/api"] -->|5| backend_app_core["backend/app/core"]
+  backend_app_core["backend/app/core"] -->|1| backend_app["backend/app"]
+  backend_tests["backend/tests"] -->|1| backend_app["backend/app"]
+  backend_tests_api["backend/tests/api"] -->|3| backend_app["backend/app"]
+  backend_tests_api["backend/tests/api"] -->|4| backend_app_core["backend/app/core"]
+  backend_tests_crud["backend/tests/crud"] -->|1| backend_app["backend/app"]
+  backend_tests_utils["backend/tests/utils"] -->|2| backend_app["backend/app"]
+  frontend_src["frontend/src"] -->|1| frontend_src_client["frontend/src/client"]
+  frontend_src["frontend/src"] -->|1| frontend_src_components["frontend/src/components"]
+  frontend_src["frontend/src"] -->|1| frontend_src_routes["frontend/src/routes"]
+  frontend_tests["frontend/tests"] -->|6| frontend_tests_utils["frontend/tests/utils"]
+  packages_react_email_emails["packages/react-email/emails"] -->|3| packages_react_email_ui["packages/react-email/ui"]
+```
+
+The diagram above shows 17 of the 24 dependencies the engine reported, to keep it readable; the numbers are how many imports each arrow stands for. The database diagram comes from the project's SQLModel classes (columns inherited from base classes are not shown):
+
+```mermaid
+erDiagram
+  user {
+    uuid id
+    str hashed_password
+    datetime created_at
+  }
+  item {
+    uuid id
+    datetime created_at
+    uuid owner_id
+  }
+  user ||--o{ item : has
+```
+
+**The skill reviewing itself.** An earlier full review of this repository (v0.4.0) ended CONDITIONAL GO at 73/100 and found five High issues in the skill's own engine, all fixed since: [scorecard image](docs/images/scorecard-self-review.png).
 
 **Visual regression.** A screenshot is compared with the baseline you approved, and the engine draws where they differ. These three images are real engine input and output, from a small test page whose heading was changed:
 
@@ -205,11 +259,29 @@ graph LR
 
 Each review also produces the expert reports, an evidence log with the captured output of every check, `report.xlsx`, `report.pdf` and a delivery folder. More about what the runs so far did and did not show is in [docs/EVALUATION.md](docs/EVALUATION.md).
 
+## What it has been tested on
+
+| What ran | On what | Result |
+|---|---|---|
+| The engine only (no model) | Flask, Express, Gin, the FastAPI full-stack template, Django: 130 to 7,104 files | Each command finishes in under 5 seconds. Exposed 8 defects in the engine, all fixed |
+| The full skill: 23 experts, research, two approved changes | The FastAPI full-stack template | Completed; NO-GO 50/100, 49 findings. The reviewer reported 23 defects and frictions in the skill; the engine bugs among them are fixed |
+| The full skill | This repository | CONDITIONAL GO 73/100; found 5 High issues in the engine, all fixed |
+| Focused and quick reviews, a fix loop, AI and deployment workflows, real screenshots | Small sample projects in `tests/fixtures` | Recorded in the evaluation document |
+| 196 automated tests | The engine | Pass on Linux, macOS and Windows, Python 3.10 and 3.13 |
+
+What this does **not** yet show:
+
+- No person has read the reports and judged whether the findings are right and useful. Every run so far was done by an agent of the same model that wrote the skill.
+- In the real-project review the project's code was never executed: no test run, no build, no live request. The approvals came from a simulated owner.
+- Nothing large or private has been reviewed. The biggest full review covered about 250 files.
+- The edit guard has not been exercised inside a live Claude Code session.
+- A full review costs roughly 300,000 to 400,000 tokens and 15 to 25 minutes.
+
+The details, including what each run got wrong, are in [docs/EVALUATION.md](docs/EVALUATION.md).
+
 ## Status: v0.6.1, not yet v1.0
 
-What is implemented and tested, and what is not, is tracked honestly in [docs/ROADMAP.md](docs/ROADMAP.md). Enterprise Experts is one reusable skill, not a hosted product: there is no server, dashboard or database to run. You install it once and invoke it in any project; it works out what that project is and applies only what fits.
-
-In short: the decision engine, intake, capability matrix, evidence recording, stack detection, scanner-result import, edit/command guard, before/after benchmarks, diagrams from code, screenshot comparison, delivery packaging, research and proposals, Docker runner and CI are implemented and covered by 196 automated tests. The skill has been run six times, including a full 23-expert review of this repository, and what those runs found (including serious defects in the skill itself, since fixed) is recorded in [docs/EVALUATION.md](docs/EVALUATION.md). The engine has also been run on five real open-source projects (Flask, Express, Gin, the FastAPI full-stack template and Django, 130 to 7,104 files), which exposed eight defects, all fixed and covered by tests. The full 23-expert review, with research and two approved changes, has been run once on an independent real project (the FastAPI full-stack template: NO-GO at 50/100, 49 findings, 23 defects and frictions reported in the skill itself, the engine bugs among them fixed in v0.6.1). That run did not execute the project's code, its approvals came from a simulated owner, and nobody has yet judged the quality of the reports. No large or private project has been reviewed, and no release has been tagged.
+What is implemented and tested, and what is not, is tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Implemented and covered by tests: the decision engine, intake, capability matrix, evidence recording, stack detection (npm, pnpm, yarn, Bun, pip, uv, Go, Java, PHP, Rust, Dart, Ruby, .NET, Terraform), scanner-result import, edit and command guard, before/after benchmarks, diagrams from code, screenshot comparison, research and proposals, delivery packaging, Docker runner and CI. No release has been tagged yet.
 
 ## Install
 
@@ -232,14 +304,19 @@ Open your project and say, for example:
 - "Is this project production-ready? Quick health check."
 - "راجع المشروع من كل الجهات وعطيني Final Project Health Report."
 - "Enterprise Experts: only Security, Database and DevOps."
+- "Review this project, and also look for newer technologies, models and MCP servers that would help it."
 
 Output is written to `enterprise-review/<date>/` inside the project.
+
+Before it starts, the skill asks you what the project is for, what data it holds, what it may run and change, and whether it may look things up on the web. Nothing is changed, installed or adopted without your approval.
 
 The engine also runs on its own, without Claude, for the deterministic parts:
 
 ```bash
 python skills/enterprise-experts/scripts/enterprise_experts.py discover /path/to/project --out review
+python skills/enterprise-experts/scripts/enterprise_experts.py graph /path/to/project --out review/graphs
 python skills/enterprise-experts/scripts/enterprise_experts.py score --review review
+python skills/enterprise-experts/scripts/enterprise_experts.py research check --review review
 PROJECT_DIR=/path/to/project docker compose run --rm audit      # same, isolated
 ```
 
@@ -253,6 +330,7 @@ PROJECT_DIR=/path/to/project docker compose run --rm audit      # same, isolated
 | [docs/SECURITY.md](docs/SECURITY.md) | Permissions, isolation, secrets, approvals |
 | [Scoring specification](skills/enterprise-experts/references/evidence-and-scoring.md) | Evidence levels, schema, caps, gates |
 | [Intake questions](skills/enterprise-experts/references/intake-questions.md) | What is asked and what each answer changes |
+| [Research and innovation](skills/enterprise-experts/references/research-and-innovation.md) | How newer technologies, models and MCP servers are researched, proposed, approved and verified |
 | [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) | Architecture, tests, adding adapters, questions and experts |
 | [docs/UPDATES.md](docs/UPDATES.md) | Versioning, upgrading, rolling back |
 | [docs/EVALUATION.md](docs/EVALUATION.md) | What has been measured about the skill, and what has not |
