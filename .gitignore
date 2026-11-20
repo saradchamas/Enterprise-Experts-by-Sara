@@ -1,4 +1,7 @@
 __pycache__/
 *.pyc
 enterprise-review/
+reports/
 .DS_Store
+.ruff_cache/
+.pytest_cache/

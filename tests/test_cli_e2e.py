@@ -166,6 +166,7 @@ class SkillPackage(unittest.TestCase):
         plugin = json.loads((REPO / ".claude-plugin" / "plugin.json").read_text())
         self.assertEqual(plugin["version"], __version__)
         self.assertIn(f"## [{__version__}]", (REPO / "CHANGELOG.md").read_text(encoding="utf-8"))
+        self.assertIn(f"image: enterprise-experts:{__version__}", (REPO / "compose.yaml").read_text())
 
     def test_engine_uses_only_the_standard_library(self):
         allowed = set(sys.stdlib_module_names) | {"ee"}
