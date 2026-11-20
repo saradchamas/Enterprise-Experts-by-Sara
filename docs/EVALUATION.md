@@ -72,6 +72,6 @@ What has actually been measured about the skill, as opposed to its engine's unit
 - Repeat runs (variance), and a person judging the quality of the deliverables.
 - Whether a genuinely production-ready project reaches GO.
 - `references/project-types.md` and the other guidance added in v0.5.0.
-- The edit guard inside a live Claude Code session. The plugin registers the hook and its logic is tested with simulated tool calls; a live session could not be authenticated in the build environment. `tools/live_guard_test.sh` runs the check on a machine where `claude` is logged in.
+- The edit guard inside a live Claude Code session. The plugin registers the hook and its logic is tested with simulated tool calls; a live session could not be authenticated in the build environment (the test there ends INCONCLUSIVE). `python tools/live_guard_test.py` runs the check on a machine where `claude` is logged in.
 - Parallel subagents (every run so far used a single agent).
 - The scanner importers for SARIF, osv-scanner, trivy and gitleaks against output captured from those tools.

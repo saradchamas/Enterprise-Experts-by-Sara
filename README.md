@@ -47,7 +47,7 @@ Target states: **Architecture Reviewed · Security Assessed · Testing Evidence-
 
 Three modes: **Full** (all 23 areas), **Quick** (8 areas), **Focused** (the areas you name; its decision covers that scope only).
 
-## Status: v0.5.0, not yet v1.0
+## Status: v0.5.1, not yet v1.0
 
 What is implemented and tested, and what is not, is tracked honestly in [docs/ROADMAP.md](docs/ROADMAP.md). Enterprise Experts is one reusable skill, not a hosted product: there is no server, dashboard or database to run. You install it once and invoke it in any project; it works out what that project is and applies only what fits.
 
@@ -105,4 +105,6 @@ PROJECT_DIR=/path/to/project docker compose run --rm audit      # same, isolated
 
 - The companion skills listed in `skills/enterprise-experts/references/companion-skills.md` are optional. Community skills vary in quality; inspect source code and permissions before installing any.
 - The compliance deliverable is a gap assessment for a qualified person to review, not legal advice.
-- No licence file has been added yet; until the owner chooses one, all rights are reserved.
+## Licence
+
+[MIT](LICENSE) © 2026 Sara Darwich Chamas. The companion skills and tools mentioned in the documentation are separate projects with their own licences.

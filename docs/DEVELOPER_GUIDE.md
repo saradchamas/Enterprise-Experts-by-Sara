@@ -58,7 +58,7 @@ ruff check .                                  # lint (pip install ruff)
 tools/docker_smoke.sh                         # needs Docker
 python tools/build_release.py --verify        # skill archive, SBOM, checksums
 tools/upgrade_rollback_test.sh <old> <new>    # needs the Claude Code CLI
-tools/live_guard_test.sh                      # needs a logged-in Claude Code CLI
+python tools/live_guard_test.py                      # needs a logged-in Claude Code CLI
 claude plugin validate .                      # needs the Claude Code CLI
 ```
 
