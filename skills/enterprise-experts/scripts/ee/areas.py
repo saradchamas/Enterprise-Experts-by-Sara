@@ -34,7 +34,10 @@ GATES = {
 
 AREA_STATUSES = ("assessed", "partial", "not_assessed", "not_applicable")
 SEVERITIES = ("critical", "high", "medium", "low", "info")
-FINDING_STATUSES = ("open", "fixed", "accepted", "false_positive")
+# pending_decision: a fix exists and is verified, but the user still has to decide (for example it
+# is correct but slower). It counts as open for every gate until they do.
+FINDING_STATUSES = ("open", "fixed", "accepted", "false_positive", "pending_decision")
+UNRESOLVED = ("open", "pending_decision")
 CHECK_RESULTS = ("pass", "fail", "not_assessed", "not_applicable")
 
 

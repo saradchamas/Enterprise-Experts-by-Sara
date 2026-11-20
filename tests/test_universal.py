@@ -71,7 +71,7 @@ class CapabilityMatrix(unittest.TestCase):
     def test_deployment_profile_and_questions(self):
         d = discover(FIXTURES / "python-fastapi")
         needs = d["deployment_profile"]["needs"]
-        self.assertTrue(needs["long_running_server"] and needs["database"] and needs["ai_inference"])
+        self.assertTrue(needs["long_running_server"] and needs["database"] and needs["calls_an_ai_api"])
         self.assertFalse(needs["static_frontend"] or needs["mobile_store_release"])
         keys = {q["key"] for q in intake.questions_for(d["flags"])}
         self.assertTrue({"external_ai_allowed", "ai_quality_bar", "deployment_goals"} <= keys)
@@ -334,7 +334,7 @@ class FixesFromTheFirstEvaluation(unittest.TestCase):
         self.assertIsNone(stack["commands"]["audit"])
         self.assertIn("lockfile", stack["unavailable"]["audit"])
         self.assertIn("node:test", d["test_frameworks"])
-        self.assertEqual(discover(FIXTURES / "healthy-node")["stacks"][0]["commands"]["audit"], ["npm", "audit", "--omit=dev"])
+        self.assertEqual(discover(FIXTURES / "healthy-node")["stacks"][0]["commands"]["audit"], ["npm", "audit", "--omit=dev", "--json"])
 
     def test_package_respects_review_scope_and_ships_findings(self):
         from tests.helpers import build_review
@@ -352,3 +352,370 @@ class FixesFromTheFirstEvaluation(unittest.TestCase):
         res = graphs.write(FIXTURES / "flawed-node", self.review / "g")
         self.assertEqual(res["written"], ["database-erd.md"])
         self.assertIn("dependency graph", res["skipped"][0])
+
+
+class FixesFromTheSecondEvaluation(unittest.TestCase):
+    """Reported by five real runs of the skill (healthy project, fix loop, AI app, UI with screenshots, full review)."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="ee-fix2-")).resolve()
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+
+    def review(self, **kw):
+        from tests.helpers import build_review
+        return build_review(self.root / "r", **kw)
+
+    def test_a_failed_command_cannot_back_a_pass(self):
+        from tests.helpers import read, write
+        from ee import scoring
+        review = self.review(mode="quick")
+        failed = evidence.run_command(review, 9, "capture", [sys.executable, "-c", "import sys; sys.exit(1)"])
+        data = read(review)
+        next(a for a in data["areas"] if a["id"] == 9)["checks"][0]["evidence"] = [failed["id"]]
+        write(review, data)
+        res = scoring.evaluate(review)
+        self.assertFalse(res["valid"])
+        self.assertTrue(any("marked pass but no evidence supports it" in e for e in res["errors"]))
+        next(a for a in data["areas"] if a["id"] == 9)["checks"][0]["result"] = "fail"   # as a failure it is fine
+        write(review, data)
+        self.assertTrue(scoring.evaluate(review)["valid"])
+
+    def test_output_files_are_part_of_the_evidence(self):
+        review = self.root / "rev"
+        shot = review / "screenshots" / "raw" / "home.png"
+        make = [sys.executable, "-c", f"import pathlib; p=pathlib.Path(r'{shot}'); p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(b'img')"]
+        ok = evidence.run_command(review, 13, "capture home", make, outputs=[shot])
+        self.assertEqual(evidence.record_level(ok, review), ("verified", None))
+        self.assertEqual(ok["outputs"][0]["path"], "screenshots/raw/home.png")
+        shot.write_bytes(b"retouched")
+        self.assertIn("modified after capture", evidence.record_level(ok, review)[1])
+        missing = evidence.run_command(review, 13, "capture that fails", [sys.executable, "-c", "pass"],
+                                       outputs=[review / "screenshots" / "never.png"])
+        level, problem = evidence.record_level(missing, review)
+        self.assertIsNone(level)
+        self.assertIn("did not produce its output file", problem)
+        with self.assertRaises(ValueError):
+            evidence.run_command(review, 13, "x", [sys.executable, "-c", "pass"], outputs=[self.root / "outside.png"])
+
+    def test_web_sources_can_be_recorded(self):
+        rec = evidence.add_note(self.root, 12, "provider pricing page", "observation", "price per million tokens",
+                                "https://example.test/pricing", str(self.root))
+        self.assertEqual(evidence.record_level(rec, self.root)[0], "observed")
+        self.assertEqual(rec["source_url"], "https://example.test/pricing")
+        self.assertRegex(rec["checked_at"], r"^\d{4}-\d\d-\d\d$")
+        with self.assertRaises(ValueError):
+            evidence.add_note(self.root, 12, "x", "inference", "d", "https://example.test/pricing")
+
+    def test_checks_do_not_leave_caches_in_the_project(self):
+        project = self.root / "p"
+        project.mkdir()
+        (project / "mod.py").write_text("X = 1\n")
+        evidence.run_command(self.root / "rev", 9, "import", [sys.executable, "-c", "import mod"], cwd=str(project))
+        self.assertEqual(sorted(p.name for p in project.iterdir()), ["mod.py"])
+
+    def test_declared_but_unused_dependencies(self):
+        project = self.root / "p"
+        (project / "app").mkdir(parents=True)
+        (project / "pyproject.toml").write_text('[project]\nname = "x"\ndependencies = ["fastapi", "openai", "sqlalchemy"]\n')
+        (project / "app" / "main.py").write_text("def answer(q):\n    return q.strip()\n")
+        d = discover(project)
+        self.assertEqual(d["declared_not_used"], ["FastAPI", "OpenAI", "OpenAI API", "SQLAlchemy"])
+        self.assertFalse(d["flags"]["has_ai"] or d["flags"]["has_api"] or d["flags"]["has_database"])
+        m = capabilities.build(d)
+        self.assertFalse(m["workflows"]["ai_engineering"]["active"])
+        self.assertIn("declared", m["workflows"]["ai_engineering"]["reason"])
+        self.assertIn("not imported anywhere", " ".join(d["notes"]))
+        used = discover(FIXTURES / "python-fastapi")
+        self.assertEqual(used["declared_not_used"], [])
+        self.assertTrue(used["flags"]["has_ai"] and used["flags"]["has_api"] and used["flags"]["has_database"])
+        self.assertEqual(discover(FIXTURES / "flawed-node")["declared_not_used"], ["Stripe"])
+
+    def test_a_dockerfile_does_not_make_a_library_a_service(self):
+        m = matrix("healthy-node")
+        self.assertEqual([status(m, a) for a in (3, 4, 5, 7, 8, 18, 12)], ["not_applicable"] * 7)
+        self.assertEqual(status(m, 11), "applicable")                       # it does have container and CI config
+        self.assertFalse(m["workflows"]["deployment_advisor"]["active"])
+        self.assertIn("only if hosting is unsettled", matrix("flawed-node")["workflows"]["deployment_advisor"]["reason"])
+
+    def test_questions_follow_the_review_scope(self):
+        quick = {q["key"] for q in intake.questions_for({"has_database": True}, "quick")}
+        full = {q["key"] for q in intake.questions_for({"has_database": True}, "full")}
+        self.assertFalse({"kpis", "compliance_targets", "data_owner", "issue_tracker"} & quick)
+        self.assertTrue({"kpis", "compliance_targets", "data_owner", "issue_tracker"} <= full)
+        self.assertTrue(set(intake.REQUIRED_KEYS) <= quick)
+        self.assertTrue({"backups", "execution_allowed", "critical_journeys"} <= quick)
+        ui = {q["key"] for q in intake.questions_for({"has_ui": True, "has_database": True}, "focused", [13])}
+        self.assertIn("ui_audience", ui)
+        self.assertNotIn("backups", ui)
+
+    def test_scorecard_explains_misleading_labels(self):
+        from tests.helpers import read, write
+        from ee import report, scoring
+        review = self.review(mode="quick", answers={"stage": "prototype"})
+        data = read(review)
+        next(a for a in data["areas"] if a["id"] == 2)["score"] = 40
+        write(review, data)
+        res = scoring.evaluate(review)
+        self.assertEqual(res["decision"], "NO-GO")
+        notes = " ".join(res["notes"])
+        self.assertIn("Stage is prototype", notes)
+        self.assertIn("no open Critical or High findings", notes)
+        self.assertIn("How to read this result", report.to_markdown(res))
+        next(a for a in data["areas"] if a["id"] == 2)["score"] = 90
+        next(a for a in data["areas"] if a["id"] == 1)["score"] = 30
+        write(review, data)
+        res = scoring.evaluate(review)
+        self.assertEqual(res["decision"], "GO")                              # area 1 is not core
+        self.assertTrue(any("Architecture scored 30" in n for n in res["notes"]))
+
+    def test_visual_compare_is_citable_and_draws_the_difference(self):
+        review = self.root / "enterprise-review" / "d"
+        before, after = FIXTURES / "visual" / "home-before.png", FIXTURES / "visual" / "home-after.png"
+        first = visual.compare(review, "home", before)
+        self.assertEqual(evidence.record_level(next(r for r in evidence.load_log(review)["records"]
+                                                    if r["id"] == first["evidence"]), review)[0], "verified")
+        approved = visual.approve(review, "home", "Sara")
+        self.assertTrue(approved["evidence"])
+        changed = visual.compare(review, "home", after)
+        self.assertEqual(changed["verdict"], "changed")
+        w, h, c, rows = visual.read_png(review / changed["diff_image"])
+        self.assertEqual((w, h, c), (400, 300, 3))
+        self.assertTrue(any(b"\xe0\x10\x10" in r for r in rows))            # changed pixels are marked
+        self.assertEqual(len(list((review / "screenshots").glob("home.compare-*.json"))), 2)
+        ids = [r["id"] for r in evidence.load_log(review)["records"]]
+        self.assertEqual(len(ids), len(set(ids)))
+
+    def test_package_keeps_screenshots_next_to_the_reports(self):
+        from ee import package
+        review = self.review(mode="focused", scope=[13])
+        (review / "screenshots" / "raw").mkdir(parents=True)
+        (review / "screenshots" / "raw" / "home.png").write_bytes((FIXTURES / "visual" / "home-before.png").read_bytes())
+        (review / "13-ui-ux.md").write_text("![home](screenshots/raw/home.png)\n")
+        (review / "00-scope-and-access.md").write_text("# scope\n")
+        res = package.build(review)
+        out = review / package.OUT
+        self.assertTrue((out / "02-expert-assessments" / "screenshots" / "raw" / "home.png").is_file())
+        self.assertTrue((out / "02-expert-assessments" / "13-ui-ux.md").is_file())
+        self.assertFalse((out / "02-expert-assessments" / "00-scope-and-access.md").exists())
+        self.assertTrue((out / "00-executive-summary" / "00-scope-and-access.md").is_file())
+        self.assertFalse([m for m in res["missing"] if "change-log" in m or "remediation-plan" in m])
+
+
+class FixesFromTheSelfReview(unittest.TestCase):
+    """Found when the skill ran a full 23-expert review of its own repository."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="ee-fix3-")).resolve()
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+
+    def test_chained_shell_commands_are_each_checked(self):
+        from ee.policy import check_command, check_shell
+        for cmd in ("ls && rm -rf src", "cat README.md; git push --force", "grep x . | xargs rm", "echo hi > src/app.py",
+                    "git -C . push --force", "find . -delete", "rm x", "gh release create v1", "curl --request POST https://x.test",
+                    "true || terraform apply", "echo $(git push)", "npm test >> package.json", "cat a | tee src/b.js"):
+            with self.subTest(cmd=cmd):
+                self.assertIsNotNone(check_shell(cmd))
+        for cmd in ("ls -la", "grep -rn 'delete from' src", "npm test 2>&1 | tail -5", "git status && git diff",
+                    "python -m pytest -q > /dev/null", "node --test > /tmp/out.txt", "git log --oneline | head",
+                    "npm audit --json > enterprise-review/2026-11-20/audit.json"):
+            with self.subTest(cmd=cmd):
+                self.assertIsNone(check_shell(cmd))
+        self.assertIsNone(check_command(["grep", "-rn", "rm -rf; git push", "src"]))   # no shell: the pattern is just text
+
+    def test_guard_blocks_chained_commands_and_hand_edits_of_engine_files(self):
+        from ee import guard, state
+        (self.root / "src").mkdir()
+        review = self.root / "enterprise-review" / "d"
+        state.init(review, "quick")
+
+        def bash(c):
+            return guard.decide({"tool_name": "Bash", "tool_input": {"command": c}, "cwd": str(self.root)})[0]
+
+        def write(p):
+            return guard.decide({"tool_name": "Write", "tool_input": {"file_path": str(p)}, "cwd": str(self.root)})
+        self.assertFalse(bash("ls && rm -rf src"))
+        self.assertFalse(bash("cat README.md; git push --force"))
+        self.assertFalse(bash("echo x > src/app.py"))
+        self.assertTrue(bash("ls src && git status"))
+        for name in ("review-state.json", "evidence-log.json", "scorecard.json", "evidence/E-001-x.txt"):
+            allowed, msg = write(review / name)
+            self.assertFalse(allowed, name)
+            self.assertIn("written by the engine only", msg)
+        self.assertTrue(write(review / "findings.json")[0])
+        self.assertTrue(write(review / "02-security.md")[0])
+
+    def test_parallel_evidence_runs_keep_every_record(self):
+        import threading
+        errors = []
+
+        def work(i):
+            try:
+                evidence.run_command(self.root, 1 + i % 5, f"run {i}", [sys.executable, "-c", f"print({i})"])
+                evidence.add_note(self.root, 2, f"note {i}", "inference", "x")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+        threads = [threading.Thread(target=work, args=(i,)) for i in range(12)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(errors, [])
+        records = evidence.load_log(self.root)["records"]
+        ids = [r["id"] for r in records]
+        self.assertEqual((len(ids), len(set(ids))), (24, 24))
+        self.assertFalse([r for r in records if r["kind"] == "pending"])
+        self.assertEqual(len(list((self.root / "evidence").iterdir())), 12)
+        self.assertFalse((self.root / "evidence-log.lock").exists())
+        for r in records:
+            if r["kind"] == "command":
+                self.assertEqual(evidence.record_level(r, self.root)[0], "verified")
+
+    def test_parallel_runs_from_separate_processes(self):
+        import subprocess
+        cli = [sys.executable, str(FIXTURES.parents[1] / "skills" / "enterprise-experts" / "scripts" / "enterprise_experts.py"),
+               "evidence", "run", "--review", str(self.root), "--area", "9", "--title", "p", "--", sys.executable, "-c", "print(1)"]
+        procs = [subprocess.Popen(cli, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) for _ in range(6)]
+        self.assertEqual([p.wait() for p in procs], [0] * 6)
+        ids = [r["id"] for r in evidence.load_log(self.root)["records"]]
+        self.assertEqual(sorted(ids), [f"E-{i:03d}" for i in range(1, 7)])
+
+    def test_malformed_review_files_are_invalid_not_crashes(self):
+        from tests.helpers import build_review, read, write
+        from ee import scoring, state
+        from ee.cli import main
+        review = build_review(self.root / "r", mode="quick")
+        good = read(review)
+        for breaker in (lambda d: d["areas"][0].update(id=[1]), lambda d: d["areas"].append("x"),
+                        lambda d: d["areas"][0].update(checks="none"), lambda d: d["areas"][0].update(findings=[5]),
+                        lambda d: d.update(areas=[{"id": 2, "status": "assessed", "score": 90, "checks": [{"id": ["a"]}]}])):
+            data = json.loads(json.dumps(good))
+            breaker(data)
+            write(review, data)
+            res = scoring.evaluate(review)
+            self.assertEqual((res["valid"], res["decision"], res["exit_code"]), (False, "NO-GO", 2))
+        write(review, good)
+        for bad in ("[]", '{"records": {}}', '{"records": ["x"]}'):
+            (review / "evidence-log.json").write_text(bad)
+            self.assertFalse(scoring.evaluate(review)["valid"], bad)
+            self.assertEqual(main(["score", "--review", str(review), "--no-write"]), 2)
+        (review / "review-state.json").write_text("{}")
+        self.assertEqual(main(["state", "show", "--review", str(review)]), 2)
+        (review / "evidence-log.json").write_text("[]")
+        self.assertEqual(main(["evidence", "run", "--review", str(review), "--area", "1", "--title", "t", "--",
+                               sys.executable, "-c", "pass"]), 2)
+        self.assertEqual(main(["package", "--review", str(review)]), 2)
+        del state
+
+    def test_scores_cannot_ignore_failed_checks_or_lazy_not_applicable(self):
+        from tests.helpers import build_review, read, write
+        from ee import scoring
+        review = build_review(self.root / "r", mode="quick")
+        data = read(review)
+        arch = next(a for a in data["areas"] if a["id"] == 1)
+        arch["score"] = 100
+        for c in arch["checks"]:
+            c["result"] = "fail"
+        write(review, data)
+        row = next(r for r in scoring.evaluate(review)["rows"] if r["id"] == 1)
+        self.assertEqual((row["final"], row["caps"]), (40, "no check passed"))
+        dr = next(a for a in data["areas"] if a["id"] == 7)
+        dr.update(status="not_applicable", reason="n/a")
+        write(review, data)
+        self.assertTrue(any("says why" in e for e in scoring.evaluate(review)["errors"]))
+        dr["reason"] = "the project stores no data and defines no infrastructure"
+        write(review, data)
+        (review / "capability-matrix.json").write_text(json.dumps({"areas": [{"id": 7, "status": "applicable"}]}))
+        res = scoring.evaluate(review)
+        self.assertTrue(res["valid"])
+        self.assertTrue(any("Disaster Recovery was marked not applicable although the capability matrix" in n for n in res["notes"]))
+
+    def test_fixed_needs_a_new_successful_run(self):
+        from tests.helpers import build_review, read, write
+        from ee import scoring
+        review = build_review(self.root / "r", mode="quick")
+        probe = evidence.run_command(review, 2, "exploit probe", [sys.executable, "-c", "import sys; print('VULNERABLE'); sys.exit(1)"])
+        data = read(review)
+        sec = next(a for a in data["areas"] if a["id"] == 2)
+        sec["findings"] = [{"id": "SEC-001", "severity": "critical", "status": "fixed", "title": "SQL injection",
+                            "evidence": [probe["id"]], "verification": [probe["id"]]}]
+        write(review, data)
+        self.assertTrue(any("ran and succeeded" in e for e in scoring.evaluate(review)["errors"]))
+        sec["findings"][0]["verification"] = sec["checks"][0]["evidence"]      # a passing run, but made BEFORE the finding
+        write(review, data)
+        self.assertTrue(any("new run made after" in e for e in scoring.evaluate(review)["errors"]))
+        recheck = evidence.run_command(review, 2, "exploit probe after fix", [sys.executable, "-c", "print('SAFE')"])
+        sec["findings"][0]["verification"] = [recheck["id"]]
+        write(review, data)
+        self.assertTrue(scoring.evaluate(review)["valid"])
+        sec["findings"][0].update(status="pending_decision")
+        write(review, data)
+        self.assertTrue(any("pending_decision needs a 'note'" in e for e in scoring.evaluate(review)["errors"]))
+        sec["findings"][0]["note"] = "correct but slower; Sara decides keep or revert"
+        write(review, data)
+        res = scoring.evaluate(review)
+        self.assertEqual((res["valid"], res["decision"]), (True, "NO-GO"))      # undecided still counts as unresolved
+
+    def test_discovery_ignores_sample_projects_kept_as_test_data(self):
+        repo = FIXTURES.parents[1]
+        d = discover(repo)
+        self.assertIn("tests/fixtures", d["excluded"])
+        self.assertEqual({s["adapter"] for s in d["stacks"]}, {"python"})
+        self.assertFalse(d["flags"]["has_ai"] or d["flags"]["has_database"] or d["flags"]["has_ui"])
+        self.assertEqual(d["secrets"], [])
+        self.assertEqual(discover(repo, exclude=["tests", "tools"])["test_files"], 0)
+        plain = self.root / "p"
+        (plain / "tests").mkdir(parents=True)
+        (plain / "pyproject.toml").write_text('[project]\nname = "x"\n')
+        (plain / "tests" / "test_x.py").write_text("import unittest\n")
+        self.assertEqual(discover(plain)["stacks"][0]["commands"]["test"],
+                         ["python", "-m", "unittest", "discover", "-s", "tests", "-t", "."])
+
+    def test_masking_covers_more_secret_shapes(self):
+        from ee.secrets import mask_text
+        value = "Zq9" + "x7Lm2Pw8" * 3
+        shapes = [f"Authorization: Bearer {value}", f"https://api.example.test/v1?api_key={value}&x=1",
+                  f'{{"password": "{value}"}}', f"password: {value}", f"client_secret={value}", f"--token {value}",
+                  f"mysql -u root --password={value}", f"export API_KEY={value}", f"glpat-{value}", f"whsec_{value}",
+                  "-----BEGIN RSA " + f"PRIVATE KEY-----\n{value}\n{value}\n-----END RSA " + "PRIVATE KEY-----",
+                  "postgres" + f"://user:{value}@db:5432/x"]
+        for text in shapes:
+            with self.subTest(text=text[:30]):
+                self.assertNotIn(value, mask_text(text))
+        self.assertEqual(mask_text("14 tests passed in 0.3s"), "14 tests passed in 0.3s")
+
+    def test_benchmark_runs_keep_their_evidence_and_agreed_thresholds(self):
+        from ee import bench
+        cmd = [sys.executable, "-c", "print('ns=35.0')"]
+        script = self.root / "bench.js"
+        script.write_text("// workload v1\n")
+        first = bench.run(self.root, "total", "baseline", cmd, runs=3, warmup=0, metric_regex=r"ns=([\d.]+)", area=9,
+                          also_areas=[6], workload_files=[script],
+                          acceptance={"max_regression_pct": 400, "min_abs_change": 100})
+        bench.run(self.root, "total", "baseline", cmd, runs=3, warmup=0, metric_regex=r"ns=([\d.]+)", area=9,
+                  workload_files=[script], acceptance={"max_regression_pct": 400, "min_abs_change": 100})
+        rec = next(r for r in evidence.load_log(self.root)["records"] if r["id"] == first["evidence"])
+        self.assertEqual(evidence.record_level(rec, self.root)[0], "verified")       # the first run's evidence survives
+        self.assertEqual(rec["also_areas"], [6])
+        slower = [sys.executable, "-c", "print('ns=90.0')"]
+        with self.assertRaises(ValueError):
+            bench.run(self.root, "total", "candidate", cmd, runs=3, warmup=0, acceptance={"max_regression_pct": 1})
+        bench.run(self.root, "total", "candidate", cmd[:2] + ["print('ns=90.0')"], runs=3, warmup=0,
+                  metric_regex=r"ns=([\d.]+)", area=9, workload_files=[script])
+        del slower
+        res = bench.compare(self.root, "total")
+        self.assertEqual(res["verdict"], "not_comparable")                           # the command string differs
+        with self.assertRaises(ValueError):
+            bench.compare(self.root, "total", max_regression=5)                      # cannot move the goalposts afterwards
+        self.assertTrue(res["thresholds"]["agreed_with_baseline"])
+
+    def test_approvals_are_checked(self):
+        from tests.helpers import build_review
+        from ee import state
+        review = build_review(self.root / "r", mode="quick")
+        state.init(review, "quick")
+        for bad in (["../../*"], ["/etc/passwd"], ["src/../../x"]):
+            with self.assertRaises(ValueError):
+                state.approve(review, "Sara", paths=bad)
+        with self.assertRaises(ValueError):
+            state.approve(review, "Sara", findings=["NOPE-999"], paths=["src/*"])
+        state.approve(review, "Sara", paths=["src/*"])

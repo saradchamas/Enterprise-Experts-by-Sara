@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import SCHEMA_VERSION
 from .areas import (AREA_STATUSES, AREAS, CHECK_RESULTS, FINDING_STATUSES, GATES, MODES, RISK_PROFILES,
-                    RISK_RANK, SEVERITIES, required_areas)
+                    RISK_RANK, SEVERITIES, UNRESOLVED, required_areas)
 from .evidence import ID_RX, load_log, record_level
 from .intake import effective_risk_profile, load_intake, validate_intake
 
@@ -46,7 +46,7 @@ class _Evidence:
             records = []
         for rec in records:
             eid = rec.get("id") if isinstance(rec, dict) else None
-            if not isinstance(eid, str) or not ID_RX.match(eid):
+            if not isinstance(rec, dict) or not isinstance(eid, str) or not ID_RX.match(eid):
                 errors.append(f"evidence record with invalid id: {eid!r}")
             elif eid in self.by_id:
                 errors.append(f"duplicate evidence id: {eid}")
@@ -66,8 +66,9 @@ class _Evidence:
         rec = self.by_id.get(eid, {})
         if level == "observed":
             return True
-        return (level == "verified" and not rec.get("timed_out")
-                and rec.get("exit_code") is not None and rec.get("exit_code") != 127)
+        # A command that failed, timed out or could not start shows a failure. It can back a
+        # "fail" check or a finding, never a "pass".
+        return level == "verified" and not rec.get("timed_out") and rec.get("exit_code") == 0
 
 
 def _refs(value, where, errors, ev, area_id, levels, require=True):
@@ -154,7 +155,7 @@ def validate(review_dir):
             errors.append(f"areas[{idx}] is not an object")
             continue
         aid = area.get("id")
-        if isinstance(aid, bool) or aid not in AREAS:
+        if isinstance(aid, bool) or not isinstance(aid, int) or aid not in AREAS:
             errors.append(f"areas[{idx}]: id must be an expert area number 1-23, got {aid!r}")
             continue
         tag = f"area {aid} {AREAS[aid]}"
@@ -170,8 +171,8 @@ def validate(review_dir):
             continue
         levels = area_levels.setdefault(aid, set())
         if status in ("not_assessed", "not_applicable"):
-            if not _text(area.get("reason")):
-                errors.append(f"{tag}: status {status} needs a 'reason'")
+            if not _text(area.get("reason")) or len(area["reason"].strip()) < 15:
+                errors.append(f"{tag}: status {status} needs a 'reason' that says why (a sentence, not 'n/a')")
             if status == "not_applicable" and aid in NEVER_NOT_APPLICABLE:
                 errors.append(f"{tag}: this area applies to every software project and cannot be not_applicable")
         else:
@@ -200,7 +201,7 @@ def validate(review_dir):
                     ok = _refs(chk.get("evidence"), f"{tag}: check {cid}", errors, ev, aid, levels)
                     if result == "pass" and ok and not any(ev.supports_pass(e) for e in ok):
                         errors.append(f"{tag}: check {cid} is marked pass but no evidence supports it "
-                                      "(a pass needs something that was run, or read at a cited location)")
+                                      "(a pass needs a command that ran and succeeded, or something read at a cited location)")
             if status == "assessed" and checks and all(
                     isinstance(c, dict) and c.get("result") in ("not_assessed", "not_applicable") for c in checks):
                 errors.append(f"{tag}: status is 'assessed' but no check was actually performed")
@@ -227,7 +228,13 @@ def validate(review_dir):
             if fstatus == "fixed":
                 proof = _refs(f.get("verification"), f"{ftag} verification", errors, ev, aid, levels)
                 if proof and not all(ev.level(e)[0] == "verified" and ev.supports_pass(e) for e in proof):
-                    errors.append(f"{ftag}: 'fixed' needs a re-check that was actually run (command evidence)")
+                    errors.append(f"{ftag}: 'fixed' needs a re-check that ran and succeeded (command evidence, exit code 0)")
+                elif proof:
+                    def order(e):          # evidence ids are issued in sequence
+                        return int(e[2:]) if isinstance(e, str) and ID_RX.match(e) else -1
+                    found_at = max((order(e) for e in f.get("evidence", [])), default=-1)
+                    if any(order(e) <= found_at for e in proof):
+                        errors.append(f"{ftag}: the re-check must be a new run made after the evidence that found the problem")
             elif fstatus == "accepted":
                 m = f.get("mitigation")
                 missing = [k for k in ("approved_by", "reason", "date", "controls")
@@ -238,6 +245,8 @@ def validate(review_dir):
                     errors.append(f"{ftag}: mitigation date must be YYYY-MM-DD")
             elif fstatus == "false_positive" and not _text(f.get("reason")):
                 errors.append(f"{ftag}: false_positive needs a 'reason'")
+            elif fstatus == "pending_decision" and not _text(f.get("note")):
+                errors.append(f"{ftag}: pending_decision needs a 'note' saying what the user has to decide")
 
     required = required_areas(mode, scope) if mode in MODES else set()
     missing = sorted(required - seen_areas)
@@ -247,10 +256,25 @@ def validate(review_dir):
     return data, intake, {"risk": risk, "area_levels": area_levels, "required": required}, errors
 
 
+def _matrix_overrides(review_dir, data):
+    """Areas the capability matrix called applicable that the review marked not applicable.
+    The matrix can be wrong, so this is allowed, but it is shown rather than hidden."""
+    try:
+        matrix = json.loads((Path(review_dir) / "capability-matrix.json").read_text(encoding="utf-8"))
+        applicable = {a["id"] for a in matrix.get("areas", []) if a.get("status") == "applicable"}
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return []
+    return [f"{AREAS[a['id']]} was marked not applicable although the capability matrix found it applicable: {a.get('reason')}"
+            for a in data["areas"] if a["status"] == "not_applicable" and a["id"] in applicable]
+
+
 def evaluate(review_dir):
-    data, _intake, ctx, errors = validate(review_dir)
+    try:
+        data, _intake, ctx, errors = validate(review_dir)
+    except Exception as exc:  # noqa: BLE001 - any surprise in a review file must fail closed, never crash open
+        data, _intake, ctx, errors = None, None, {}, [f"a review file is malformed ({type(exc).__name__}: {exc})"]
     result = {"valid": not errors, "errors": errors, "decision": "NO-GO", "overall": None, "rows": [],
-              "blockers": [], "conditions": [], "project": (data or {}).get("project"),
+              "blockers": [], "conditions": [], "notes": [], "project": (data or {}).get("project"),
               "review_date": (data or {}).get("review_date"), "mode": (data or {}).get("mode"),
               "risk_profile": ctx.get("risk"), "exit_code": EXIT["INVALID"]}
     if errors:
@@ -264,8 +288,8 @@ def evaluate(review_dir):
     for area in sorted(data["areas"], key=lambda a: a["id"]):
         aid, name, status = area["id"], AREAS[area["id"]], area["status"]
         findings = area.get("findings", [])
-        crit = [f for f in findings if f["severity"] == "critical" and f["status"] in ("open", "accepted")]
-        high_open = [f for f in findings if f["severity"] == "high" and f["status"] == "open"]
+        crit = [f for f in findings if f["severity"] == "critical" and f["status"] in (*UNRESOLVED, "accepted")]
+        high_open = [f for f in findings if f["severity"] == "high" and f["status"] in UNRESOLVED]
         high_acc = [f for f in findings if f["severity"] == "high" and f["status"] == "accepted"]
         is_core = aid in core
         for f in crit:
@@ -280,6 +304,12 @@ def evaluate(review_dir):
             continue
         levels = ctx["area_levels"].get(aid, set())
         limits = []
+        results = [c.get("result") for c in area.get("checks", [])]
+        done = [r for r in results if r in ("pass", "fail")]
+        if done and "pass" not in done:
+            limits.append((40, "no check passed"))
+        elif done and done.count("pass") * 2 < len(done):
+            limits.append((70, "more checks failed than passed"))
         if crit:
             limits.append((40, f"{len(crit)} unresolved Critical"))
         if high_open:
@@ -304,7 +334,7 @@ def evaluate(review_dir):
                      "final": round(final), "caps": "; ".join(caps), "critical": len(crit),
                      "high": len(high_open), "basis": basis})
         for f in high_open:
-            conditions.append(f"Open High {f['id']} ({name}): {f['title']}")
+            conditions.append(f"{'Open' if f['status'] == 'open' else 'Undecided'} High {f['id']} ({name}): {f['title']}")
         if ctx["risk"] != "standard":
             for f in high_acc:
                 conditions.append(f"Accepted High {f['id']} ({name}) needs sign-off review for a {ctx['risk']} project")
@@ -321,6 +351,20 @@ def evaluate(review_dir):
     for aid in sorted(core - present):
         conditions.append(f"Core area {aid} {AREAS[aid]} is outside this {data['mode']} review: "
                           "the decision covers the reviewed scope only, not a release")
+    notes = result["notes"]
+    notes += _matrix_overrides(review_dir, data)
+    stage = ((_intake or {}).get("answers") or {}).get("stage")
+    if stage == "prototype":
+        notes.append("Stage is prototype: these are release gates. Read the result as the distance to a release, "
+                     "not as a verdict on work that is not meant to be released yet.")
+    severe = sum(r["critical"] + r["high"] for r in rows)
+    weak = [r for r in rows if r["final"] is not None and r["final"] < 50]
+    if blockers and not severe:
+        notes.append("There are no open Critical or High findings. The NO-GO comes from low area scores or areas "
+                     "that were not assessed: typically things that are missing or unbuilt, not something dangerous that is live.")
+    if not blockers and weak:
+        notes.append("CONDITIONAL GO here only means no core gate failed within the reviewed scope. "
+                     + "; ".join(f"{r['name']} scored {r['final']} with {r['high']} open High" for r in weak) + ".")
     if not wtot:
         blockers.append("No area was scored")
     else:

@@ -140,7 +140,7 @@ class Benchmarks(unittest.TestCase):
                 "failures": 0, "samples": samples, "stats": bench.stats(samples), "environment": {"cpus": 4},
                 "commit": label, "evidence": "E-001" if label == "baseline" else "E-002"}
         data.update(over)
-        (self.review / bench.DIR / f"api-{label}.json").write_text(json.dumps(data))
+        (self.review / bench.DIR / f"api-{label}-01.json").write_text(json.dumps(data))
 
     def verdict(self, base, cand, **kw):
         self.put("baseline", base)
@@ -183,7 +183,7 @@ class Benchmarks(unittest.TestCase):
                 self.assertIn(expected, res["reason"])
         self.put("candidate", [50, 51])
         self.assertIn("fewer than 3", bench.compare(self.review, "api")["reason"])
-        (self.review / bench.DIR / "api-candidate.json").unlink()
+        (self.review / bench.DIR / "api-candidate-01.json").unlink()
         with self.assertRaises(ValueError):
             bench.compare(self.review, "api")
 
@@ -274,7 +274,7 @@ class Delivery(ReviewCase, unittest.TestCase):
         self.assertGreater(len(list((out / "10-evidence" / "execution-logs").iterdir())), 20)
         manifest = (out / "MANIFEST.md").read_text(encoding="utf-8")
         self.assertIn("not available: `09-quality-assurance.md`", manifest)
-        self.assertIn("PDF export", manifest)
+        self.assertIn("plain-text summary", manifest)
         self.assertFalse((out / "06-testing").exists())
         self.assertIn("06-testing/09-quality-assurance.md", res["missing"])
 

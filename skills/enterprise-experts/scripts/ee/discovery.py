@@ -70,6 +70,8 @@ INJECTION = re.compile(
     r"|(mark|report|rate|score)\s+(this|the)\s+(project|review|repo(sitory)?|code)\s+as\s+(go\b|passed|secure|production.ready|100)"
     r"|do\s+not\s+(report|mention|flag|disclose)\s+(any\s+)?(vulnerabilit|finding|issue|secret)"
     r"|(ai|llm|assistant|claude|agent)s?\s*[:,]?\s+(you\s+)?(must|should)\s+(skip|approve|ignore)")
+FIXTURE_DIRS = {"fixtures", "__fixtures__", "testdata", "test-data", "test_data"}
+IMPORT_LINE = re.compile(r"^\s*(?:import|from|const|let|var|require|use|using|export)\b|\brequire\(|\bimport\(")
 TEXT_EXT = set(LANG) | {".json", ".yml", ".yaml", ".toml", ".env", ".ini", ".cfg", ".conf", ".properties", ".tf",
                          ".md", ".txt", ".xml", ".gradle", ".pem", ".key", ""}
 
@@ -91,8 +93,9 @@ def is_test_file(rel):
             or name.startswith("test_") or name.endswith("_test.go") or name.endswith("test.java"))
 
 
-def discover(root):
+def discover(root, exclude=()):
     root = Path(root).resolve()
+    exclude = {e.strip("/") for e in exclude}
     d = {"root": str(root), "languages": Counter(), "manifests": [], "lockfiles": [], "frameworks": set(),
          "test_frameworks": set(), "test_files": 0, "source_files": 0, "ci": [], "containers": [], "iac": [],
          "database": {"tools": set(), "migrations_dirs": [], "schema_files": [], "sql_files": 0},
@@ -100,14 +103,21 @@ def discover(root):
          "largest_source_files": [], "secrets": [], "scripts": {}, "has_git": (root / ".git").exists(),
          "gitignore_covers_env": None, "notes": [], "commit": git_commit(root),
          "ai_libraries": set(), "workspace_markers": [],
-         "agent_instruction_files": [], "prompt_injection_suspects": [], "dockerfile_dirs": set(), "tf_dirs": set(),
+         "agent_instruction_files": [], "prompt_injection_suspects": [], "excluded": [], "dockerfile_dirs": set(), "tf_dirs": set(),
          "dotnet_dirs": set(), "data_markers": []}
     dep_blob = []
+    import_lines = []
     sizes = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [x for x in dirnames if x not in SKIP_DIRS]
         dp = Path(dirpath)
         rel_dir = dp.relative_to(root)
+        # Sample projects kept as test data are not the project under review.
+        for x in list(dirnames):
+            rel_x = (rel_dir / x).as_posix()
+            if x in FIXTURE_DIRS or rel_x in exclude:
+                d["excluded"].append(rel_x)
+        dirnames[:] = [x for x in dirnames if x not in SKIP_DIRS and x not in FIXTURE_DIRS
+                       and (rel_dir / x).as_posix() not in exclude]
         low = dp.name.lower()
         if low in ("migrations", "migrate", "alembic"):
             d["database"]["migrations_dirs"].append(rel_dir.as_posix())
@@ -163,6 +173,9 @@ def discover(root):
                                                                "text": line.strip()[:160]})
             if re.search(r"(openapi|swagger)[^/]*\.(ya?ml|json)$", fl):
                 d["api_specs"].append(rel.as_posix())
+            if ext in LANG and ext not in (".sql", ".html", ".css", ".scss") and len(import_lines) < 20000:
+                import_lines += [ln for ln in read_text(p, 300_000).splitlines()
+                                 if IMPORT_LINE.match(ln) and len(ln) < 300]
             if ext in LANG:
                 d["languages"][LANG[ext]] += 1
                 if is_test_file(rel):
@@ -207,6 +220,16 @@ def discover(root):
         for key, label in hints.items():
             if re.search(r"(?<![a-z0-9_\-])" + re.escape(key), blob):
                 target.add(label)
+    # A dependency in a manifest is a declaration, not a use. Check the code actually imports it.
+    imports = "\n".join(import_lines).lower()
+
+    def used(hints, labels):
+        keys = [k for k, label in hints.items() if label in labels]
+        return any(re.search(re.escape(k.strip("@/").replace("-", "_")).replace("_", "[-_./]?"), imports) for k in keys)
+    d["declared_not_used"] = sorted(
+        {label for hints, found in ((AI_HINTS, d["ai_libraries"]), (FRAMEWORK_HINTS, d["frameworks"] & API_FRAMEWORKS),
+                                    (DB_HINTS, d["database"]["tools"]), (PAID_HINTS, d["paid_services"]))
+         for label in found if not used(hints, {label})})
     if any("node --test" in str(v) for v in d["scripts"].values()) or re.search(r"""['"]node:test['"]""", blob):
         d["test_frameworks"].add("node:test")
     gi = root / ".gitignore"
@@ -246,16 +269,20 @@ def discover(root):
     d["unsupported"] = unsupported_languages(d["languages"], d["stacks"])
     code_stacks = [s for s in d["stacks"] if s["adapter"] != "terraform"]
     fw = d["frameworks"]
+    unused = set(d["declared_not_used"])
+    if unused:
+        d["notes"].append("Declared in a manifest but not imported anywhere in the code: " + ", ".join(sorted(unused))
+                          + ". Ask whether the code that uses them is elsewhere or not written yet.")
     d["flags"] = {
         "is_monorepo": bool(d["workspace_markers"]) or any(s.get("workspaces") for s in d["stacks"])
         or len({s["path"] for s in code_stacks}) >= 3,
         "is_microservices": len(d["dockerfile_dirs"]) >= 3,
         "has_ui": bool(fw & UI_FRAMEWORKS) or any(k in d["languages"] for k in ("HTML", "Vue", "Svelte")),
-        "has_api": bool(fw & API_FRAMEWORKS) or bool(d["api_specs"]),
+        "has_api": bool((fw & API_FRAMEWORKS) - unused) or bool(d["api_specs"]),
         "has_mobile": bool(fw & MOBILE_FRAMEWORKS),
-        "has_database": bool(d["database"]["tools"] or d["database"]["migrations_dirs"]
+        "has_database": bool(set(d["database"]["tools"]) - unused or d["database"]["migrations_dirs"]
                              or d["database"]["schema_files"] or d["database"]["sql_files"]),
-        "has_ai": bool(d["ai_libraries"]),
+        "has_ai": bool(set(d["ai_libraries"]) - unused),
         "has_paid_services": bool(d["paid_services"]),
         "has_ci": bool(d["ci"]),
         "has_containers": bool(d["containers"]),
@@ -265,14 +292,17 @@ def discover(root):
         "unsupported_stack": not d["stacks"] and d["source_files"] > 0,
     }
     d["analysis_tools"] = analysis_tools()
+    if d["excluded"]:
+        d["notes"].append("Not scanned (test data or excluded by request): " + ", ".join(d["excluded"])
+                          + ". Pass --exclude to leave out more, or review such a folder on its own if it matters.")
     hosting = [c for c in d["ci"] if Path(c).name in CI_FILES] + d["iac"]
     d["deployment_profile"] = {
         "needs": {
-            "long_running_server": bool(fw & API_FRAMEWORKS) or "Next.js" in fw or "Nuxt" in fw,
+            "long_running_server": bool((fw & API_FRAMEWORKS) - unused) or "Next.js" in fw or "Nuxt" in fw,
             "static_frontend": bool(fw & {"React", "Vue", "Angular", "Svelte", "Vite"}) and not (fw & {"Next.js", "Nuxt"}),
             "database": d["flags"]["has_database"],
             "cache_or_queue": bool({"Redis"} & set(d["database"]["tools"])),
-            "ai_inference": d["flags"]["has_ai"],
+            "calls_an_ai_api": d["flags"]["has_ai"],
             "local_model_runtime": bool(set(d["ai_libraries"]) & {"Ollama", "Transformers"}),
             "mobile_store_release": d["flags"]["has_mobile"],
             "containers": d["flags"]["has_containers"],

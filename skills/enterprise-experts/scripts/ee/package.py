@@ -8,39 +8,48 @@ import re
 import shutil
 from pathlib import Path
 
-from . import __version__, report, scoring
+from . import __version__, export, report, scoring  # noqa: F401
 from .areas import AREAS, required_areas
 
 OUT = "FINAL-ENGINEERING-DELIVERY"
 # section -> (description, [(glob in review folder, destination subfolder)])
+EXPERT = ["0[1-9]-*.md", "1[0-9]-*.md", "2[0-3]-*.md"]
 LAYOUT = [
     ("00-executive-summary", "Decision, scores and the health report", [
-        ("FINAL-PROJECT-HEALTH-REPORT.md", ""), ("scorecard.md", ""), ("scorecard.html", ""), ("scorecard.json", "")]),
+        ("FINAL-PROJECT-HEALTH-REPORT.md", ""), ("scorecard.md", ""), ("scorecard.html", ""), ("scorecard.json", ""),
+        ("report.xlsx", ""), ("report.pdf", ""), ("trend.md", ""), ("00-scope-and-access.md", ""),
+        ("scorecard-before-remediation.md", ""),
+        ("capability-matrix.md", "")]),
     ("01-architecture", "Architecture deliverable and generated diagrams", [
         ("01-architecture.md", ""), ("graphs/*.md", "graphs")]),
-    ("02-expert-assessments", "One report per expert area in scope", [("[0-2][0-9]-*.md", "")]),
+    # Screenshots sit beside the expert reports so that the image links inside them keep working.
+    ("02-expert-assessments", "One report per expert area in scope, with the screenshots they reference",
+     [(p, "") for p in EXPERT] + [("screenshots/**/*", "screenshots")]),
     ("03-security", "Security audit, data governance and compliance gaps", [
-        ("02-security.md", ""), ("14-data-governance.md", ""), ("19-compliance.md", "")]),
+        ("02-security.md", ""), ("14-data-governance.md", ""), ("19-compliance.md", ""), ("scans/*", "scans")]),
     ("04-code-quality", "Technical leadership review and debt register", [("22-technical-leadership.md", "")]),
-    ("05-performance", "Benchmarks: baseline, candidate, comparison", [
-        ("03-performance.md", ""), ("04-scalability.md", ""), ("benchmarks/*", "benchmarks")]),
+    ("05-performance", "Benchmarks, scalability and cost", [
+        ("03-performance.md", ""), ("04-scalability.md", ""), ("12-cost.md", ""), ("benchmarks/*", "benchmarks")]),
     ("06-testing", "QA report", [("09-quality-assurance.md", "")]),
     ("07-infrastructure", "DevOps, infrastructure, monitoring, recovery", [
         ("10-devops.md", ""), ("11-infrastructure.md", ""), ("08-observability.md", ""),
         ("07-disaster-recovery.md", ""), ("18-incident-management.md", "")]),
     ("08-improvements", "Approved changes and their verification", [("change-log.md", ""), ("remediation-plan.md", "")]),
     ("09-documentation", "Documentation deliverable", [("17-documentation.md", "")]),
-    ("10-evidence", "Evidence index and captured output", [
+    ("10-evidence", "Evidence index, captured output and working files", [
         ("evidence-log.json", ""), ("findings.json", ""), ("evidence/*", "execution-logs"), ("intake.json", ""),
-        ("discovery.json", ""), ("discovery.md", ""), ("review-state.json", "")]),
+        ("discovery.json", ""), ("discovery.md", ""), ("capability-matrix.json", ""), ("review-state.json", ""),
+        ("research-log.md", ""), ("checks/**/*", "checks"), ("probes/**/*", "probes")]),
 ]
-NOT_IMPLEMENTED = ["PDF export of the health report", "Excel export", "interactive dashboard", "SBOM of the reviewed project"]
+OPTIONAL = {"scorecard-before-remediation.md", "report.xlsx", "report.pdf", "trend.md", "remediation-plan.md", "change-log.md", "research-log.md",
+            "capability-matrix.md", "capability-matrix.json", "00-scope-and-access.md"}
+NOT_IMPLEMENTED = ["PDF of the full report with diagrams (report.pdf is a plain-text summary)", "SBOM of the reviewed project"]
 
 
 def build(review_dir):
     review = Path(review_dir)
+    export.export(review)                     # report.xlsx, report.pdf; also refreshes the scorecards
     res = scoring.evaluate(review)
-    report.write_all(res, review)
     out = review / OUT
     if out.exists():
         shutil.rmtree(out)
@@ -62,14 +71,16 @@ def build(review_dir):
     for section, desc, sources in LAYOUT:
         copied, missing = [], []
         for pattern, sub in sources:
-            matches = sorted(p for p in review.glob(pattern) if p.is_file())
+            matches = sorted(p for p in review.glob(pattern) if p.is_file() and OUT not in p.parts)
             if not matches and not in_scope(pattern):
                 summary["out_of_scope"].append(f"{section}/{pattern}")
                 continue
-            if not matches and "*" not in pattern:
+            if not matches and "*" not in pattern and pattern not in OPTIONAL:
                 missing.append(pattern)
             for src in matches:
-                dst = out / section / sub / src.name
+                base = pattern.split("**")[0].split("*")[0].rstrip("/") if "**" in pattern else None
+                inner = src.relative_to(review / base) if base else Path(src.name)
+                dst = out / section / sub / inner
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
                 copied.append(dst.relative_to(out).as_posix())

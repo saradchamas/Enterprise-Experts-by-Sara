@@ -28,6 +28,8 @@ def to_markdown(res):
             star=" ★" if r["core"] else "", **{k: ("—" if v is None else v) for k, v in r.items()}))
     o += ["", f"★ = core area for a {res['risk_profile']} project (weight 2; for GO it must be assessed, backed by "
           f"Verified evidence and score at least {gate['go_score']}).", ""]
+    if res.get("notes"):
+        o += ["## How to read this result", ""] + [f"- {n}" for n in res["notes"]] + [""]
     if res["blockers"]:
         o += ["## Blockers (reasons for NO-GO)", ""] + [f"- {b}" for b in res["blockers"]] + [""]
     if res["conditions"]:
@@ -58,7 +60,7 @@ th{{background:#f6f8fa}}.d{{display:inline-block;padding:.4rem 1rem;border-radiu
 &nbsp;|&nbsp; {e(str(res.get('review_date')))} &nbsp;|&nbsp; mode: {e(str(res.get('mode')))} &nbsp;|&nbsp; risk profile: {e(str(res.get('risk_profile')))}</p>
 {block('Validation errors', res['errors'])}
 {'<table><tr><th>#</th><th>Area</th><th>Status</th><th>Expert score</th><th>Final</th><th>Cap / reason</th><th>Unresolved Critical</th><th>Open High</th><th>Evidence basis</th></tr>' + rows + '</table><p>★ core area for this risk profile</p>' if res['rows'] else ''}
-{block('Blockers', res['blockers'])}{block('Conditions', res['conditions'])}</body></html>"""
+{block('How to read this result', res.get('notes', []))}{block('Blockers', res['blockers'])}{block('Conditions', res['conditions'])}</body></html>"""
 
 
 def write_all(res, review_dir):

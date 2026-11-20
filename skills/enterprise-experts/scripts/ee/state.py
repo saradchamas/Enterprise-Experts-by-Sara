@@ -72,6 +72,8 @@ def plan(state):
         for a in mine:
             if st[a] in ("done", "skipped"):
                 out["done"].append(a)
+            elif st[a] == "in_progress":
+                out["in_progress"].append(a)
             elif earlier_open:
                 out["blocked"].append(a)
             elif st[a] == "in_progress":
@@ -91,7 +93,19 @@ def approve(review_dir, approved_by, findings=(), paths=(), command=None, note=N
     if not approved_by or not str(approved_by).strip():
         raise ValueError("an approval needs --by <who approved it>")
     if not command and not paths:
-        raise ValueError("an approval needs --paths (files a fix may touch) or --command (one exact command)")
+        raise ValueError("an approval needs --paths (files a fix may touch) or --exact-command (one exact command)")
+    for p in paths:
+        if p.startswith(("/", "\\", "~")) or ".." in p.replace("\\", "/").split("/") or (len(p) > 1 and p[1] == ":"):
+            raise ValueError(f"approved paths are relative to the project and stay inside it: {p!r}")
+    known = None
+    try:
+        data = json.loads((Path(review_dir) / "findings.json").read_text(encoding="utf-8"))
+        known = {f.get("id") for a in data.get("areas", []) for f in a.get("findings", []) or []}
+    except (OSError, ValueError, AttributeError, TypeError):
+        pass
+    unknown = [f for f in findings if known is not None and f not in known]
+    if unknown:
+        raise ValueError(f"no such finding in findings.json: {', '.join(unknown)}")
     state = load(review_dir)
     entry = {"approved_by": approved_by.strip(), "at": _now(), "note": note}
     if command:

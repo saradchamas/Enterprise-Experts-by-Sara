@@ -1,5 +1,6 @@
 """Unit tests: evidence capture, command policy, secret masking, intake, state, discovery adapters."""
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -213,12 +214,12 @@ class DiscoveryAdapters(unittest.TestCase):
                          {(".", "node"), ("apps/web", "node"), ("apps/api", "node"), ("services/worker", "python")})
         self.assertEqual(self.stack("monorepo", "apps/web")["commands"]["typecheck"][-1], "--noEmit")
         self.assertIsNone(self.stack("monorepo", "apps/web")["commands"]["test"])
-        self.assertEqual(self.stack("monorepo", "services/worker")["commands"]["lint"], ["ruff", "check", "."])
+        self.assertEqual(self.stack("monorepo", "services/worker")["commands"]["lint"], ["ruff", "check", "--no-cache", "."])
 
     def test_python_ai_app(self):
         d = self.d["python-fastapi"]
         self.assertTrue(d["flags"]["has_ai"] and d["flags"]["has_api"] and d["flags"]["has_database"])
-        self.assertEqual(self.stack("python-fastapi")["commands"]["typecheck"], ["mypy", "."])
+        self.assertEqual(self.stack("python-fastapi")["commands"]["typecheck"], ["mypy", "--cache-dir", os.devnull, "."])
         self.assertIn("OpenAI", d["ai_libraries"])
 
     def test_go_service(self):

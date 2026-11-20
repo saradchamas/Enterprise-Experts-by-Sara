@@ -33,8 +33,16 @@ def stats(samples):
             "stdev": statistics.stdev(samples) if len(samples) > 1 else 0.0, "min": min(samples), "max": max(samples)}
 
 
+def _latest(review, name, label):
+    files = sorted((Path(review) / DIR).glob(f"{name}-{label}-[0-9][0-9].json"))
+    return files[-1] if files else None
+
+
 def run(review_dir, name, label, argv, runs=5, warmup=1, cwd=".", metric_regex=None, unit=None, area=3,
-        timeout=600, approved=False):
+        timeout=600, approved=False, also_areas=(), workload_files=(), acceptance=None):
+    """`acceptance` (baseline only) records the thresholds agreed before the change:
+    {"min_improvement_pct", "max_regression_pct", "min_abs_change"}. `workload_files` are hashed so
+    that the comparison can tell the same script and data were used."""
     if not NAME_RX.match(name or ""):
         raise ValueError("benchmark name must be lowercase letters, digits and dashes")
     if label not in LABELS:
@@ -74,30 +82,47 @@ def run(review_dir, name, label, argv, runs=5, warmup=1, cwd=".", metric_regex=N
                 failures += 1
     review = Path(review_dir)
     (review / DIR).mkdir(parents=True, exist_ok=True)
+    if acceptance and label != "baseline":
+        raise ValueError("acceptance thresholds are agreed before the change: record them with the baseline run")
     result = {"name": name, "label": label, "command": mask_text(" ".join(argv)), "cwd": str(cwd),
+              "workload": {Path(f).name: evidence.sha256_file(f) for f in workload_files},
+              "acceptance": acceptance or None,
               "metric": metric_regex or "wall-clock seconds", "unit": unit or ("s" if not rx else ""),
               "runs": runs, "warmup": warmup, "failures": failures, "samples": samples,
               "stats": stats(samples) if samples else None, "environment": environment(),
               "commit": evidence.git_commit(cwd), "log": log}
-    path = review / DIR / f"{name}-{label}.json"
+    # Every run keeps its own file: re-running a label must not rewrite evidence already cited.
+    n = len(list((review / DIR).glob(f"{name}-{label}-[0-9][0-9].json"))) + 1
+    path = review / DIR / f"{name}-{label}-{n:02d}.json"
     path.write_text(json.dumps(result, indent=2), encoding="utf-8")
-    rec = evidence.add_artifact(review, area, f"benchmark {name} ({label})", result["command"], path,
-                                exit_code=0 if not failures else 1, commit=result["commit"])
+    rec = evidence.add_artifact(review, area, f"benchmark {name} ({label}, run {n})", result["command"], path,
+                                exit_code=0 if not failures else 1, commit=result["commit"], also_areas=also_areas)
     result["evidence"] = rec["id"]
     path.write_text(json.dumps(result, indent=2), encoding="utf-8")
     evidence.refresh_hash(review, rec["id"])
     return result
 
 
-def compare(review_dir, name, min_improvement=10.0, max_regression=5.0, higher_is_better=False):
-    """Verdict: improved | regressed | no_significant_change | not_comparable."""
+def compare(review_dir, name, min_improvement=None, max_regression=None, higher_is_better=False, min_abs_change=None):
+    """Verdict: improved | regressed | no_significant_change | not_comparable.
+    Uses the latest baseline and candidate runs, and the thresholds agreed with the baseline if any."""
     review = Path(review_dir)
-    try:
-        base, cand = (json.loads((review / DIR / f"{name}-{label}.json").read_text(encoding="utf-8"))
-                      for label in LABELS)
-    except FileNotFoundError as exc:
-        raise ValueError(f"both a baseline and a candidate run are needed: {exc.filename} is missing") from None
+    paths = [_latest(review, name, label) for label in LABELS]
+    if None in paths:
+        raise ValueError("both a baseline and a candidate run are needed for " + name)
+    base, cand = (json.loads(p.read_text(encoding="utf-8")) for p in paths)
+    agreed = base.get("acceptance") or {}
+    given = {"min_improvement_pct": min_improvement, "max_regression_pct": max_regression, "min_abs_change": min_abs_change}
+    for key, value in given.items():
+        if value is not None and key in agreed and agreed[key] != value:
+            raise ValueError(f"{key} was agreed as {agreed[key]} when the baseline was recorded; it cannot be changed "
+                             "after seeing the candidate. Record a new baseline if the criterion really changed.")
+    min_improvement = agreed.get("min_improvement_pct", 10.0 if min_improvement is None else min_improvement)
+    max_regression = agreed.get("max_regression_pct", 5.0 if max_regression is None else max_regression)
+    min_abs_change = agreed.get("min_abs_change", 0.0 if min_abs_change is None else min_abs_change)
     problems = []
+    if base.get("workload") != cand.get("workload"):
+        problems.append("the benchmark script or data files differ between baseline and candidate")
     if base["command"] != cand["command"]:
         problems.append("the command differs between baseline and candidate")
     if base["metric"] != cand["metric"]:
@@ -112,7 +137,8 @@ def compare(review_dir, name, min_improvement=10.0, max_regression=5.0, higher_i
     out = {"name": name, "metric": base["metric"], "unit": base.get("unit", ""), "baseline": base["stats"],
            "candidate": cand["stats"], "baseline_commit": base.get("commit"), "candidate_commit": cand.get("commit"),
            "evidence": [base.get("evidence"), cand.get("evidence")], "problems": problems,
-           "thresholds": {"min_improvement_pct": min_improvement, "max_regression_pct": max_regression}}
+           "thresholds": {"min_improvement_pct": min_improvement, "max_regression_pct": max_regression,
+                          "min_abs_change": min_abs_change, "agreed_with_baseline": bool(agreed)}}
     if problems:
         out.update(verdict="not_comparable", change_pct=None, reason="; ".join(problems))
     else:
@@ -125,6 +151,10 @@ def compare(review_dir, name, min_improvement=10.0, max_regression=5.0, higher_i
         if not significant:
             out.update(verdict="no_significant_change",
                        reason="the difference is within the run-to-run noise (2 standard deviations)")
+        elif abs(c["median"] - b["median"]) < min_abs_change:
+            out.update(verdict="no_significant_change",
+                       reason=f"a real change of {gain:+.1f}%, but smaller in absolute terms than the agreed "
+                              f"{min_abs_change} {base.get('unit', '')} that matters for this project")
         elif gain >= min_improvement:
             out.update(verdict="improved", reason=f"median better by {gain:.1f}%, beyond noise")
         elif gain <= -max_regression:

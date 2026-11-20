@@ -19,11 +19,12 @@ import json
 import re
 from pathlib import Path
 
-from .policy import check_command
+from .policy import check_shell
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 PROTECTED_BRANCHES = {"main", "master", "production", "prod", "release"}
 REVIEW_DIR = "enterprise-review"
+ENGINE_OWNED = {"review-state.json", "evidence-log.json"}
 SAFE_IN_REMEDIATION = re.compile(r"^\s*git\s+(add|commit|switch|checkout\s+-b|worktree\s+add|stash|restore\s+--staged)\b")
 
 
@@ -83,6 +84,12 @@ def decide(event):
             return True, ""
         path = (Path(cwd) / target).resolve()
         if (project / REVIEW_DIR).resolve() in [path, *path.parents]:
+            # The engine's own records are written by the engine, not by hand: a hand-written
+            # evidence log or state file would defeat the checks that rely on them.
+            if path.name in ENGINE_OWNED or path.name.startswith("scorecard") or "evidence" in path.relative_to(
+                    (project / REVIEW_DIR).resolve()).parts[:-1]:
+                return False, (f"Enterprise Experts: '{path.name}' is written by the engine only. Use the "
+                               "`evidence`, `state`, `approve` and `score` commands instead of editing it.")
             return True, ""
         if project.resolve() not in path.parents:
             return True, ""
@@ -101,7 +108,7 @@ def decide(event):
 
     if tool == "Bash":
         command = str(tool_input.get("command", ""))
-        reason = check_command(command.split())
+        reason = check_shell(command)
         if not reason:
             return True, ""
         if command.strip() in {c.get("command", "").strip() for c in state.get("approved_commands", [])}:
@@ -110,5 +117,5 @@ def decide(event):
                 and current_branch(project) not in PROTECTED_BRANCHES:
             return True, ""
         return False, (f"Enterprise Experts: this command {reason} and a review is active. It was not run. "
-                       "Ask the user; if they approve this exact command, record it with `approve --command`.")
+                       "Ask the user; if they approve this exact command, record it with `approve --exact-command`.")
     return True, ""

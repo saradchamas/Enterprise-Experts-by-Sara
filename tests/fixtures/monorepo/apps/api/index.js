@@ -1,1 +1,2 @@
-module.exports = {};
+const express = require('express');
+module.exports = express();

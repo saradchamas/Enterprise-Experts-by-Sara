@@ -6,7 +6,7 @@ never asked about backups of one. Answers live in <review_dir>/intake.json.
 import json
 from pathlib import Path
 
-from .areas import MODES, RISK_PROFILES, RISK_RANK
+from .areas import MODES, RISK_PROFILES, RISK_RANK, required_areas
 
 INTAKE_NAME = "intake.json"
 UNKNOWN = "unknown"
@@ -46,6 +46,10 @@ QUESTIONS = [
     q("environments_allowed", "Which environments may I run things against? (choose all that apply)", "multi",
       ["none_read_code_only", "local", "staging"], True, experts=[3, 4, 5, 9],
       why="Load, resilience and E2E tests only run where you allow. Production is never a test target."),
+    q("execution_allowed", "Besides reading the code and running its own tests, may I: install the project's dependencies, "
+      "use Docker, run tools that contact the network (for example a dependency audit)? (choose all that apply)", "multi",
+      ["install_dependencies", "use_docker", "network_tools", "none"], experts=[2, 9, 10],
+      why="Each one changes something or sends something out; without your yes those checks are recorded as not assessed."),
     q("critical_journeys", "What are the 3-5 things that must never break (e.g. login, checkout, report export)?",
       experts=[5, 9, 13, 16], why="Tests, SLOs and UX review focus on these."),
     q("users_scale", "Roughly how many users/requests now, and what do you expect in 12 months?",
@@ -114,13 +118,22 @@ QUESTION_KEYS = {x["key"] for x in QUESTIONS}
 REQUIRED_KEYS = [x["key"] for x in QUESTIONS if x["required"]]
 
 
-def questions_for(flags=None, mode=None):
-    """The questions to ask, given discovery flags (dict of booleans)."""
+def questions_for(flags=None, mode=None, scope=None):
+    """The questions to ask, given discovery flags and the review scope. Required questions are
+    always asked; an optional question is dropped when every expert it serves is out of scope."""
     flags = dict(flags or {})
     flags["mode_focused"] = mode == "focused"
     flags["has_ui"] = flags.get("has_ui") or flags.get("has_mobile")
     flags["deployable"] = any(flags.get(k) for k in ("has_api", "has_ui", "has_database", "has_containers", "has_iac"))
-    return [x for x in QUESTIONS if x["when"] is None or flags.get(x["when"])]
+    in_scope = required_areas(mode, scope) if mode in ("quick", "focused") else None
+    out = []
+    for x in QUESTIONS:
+        if x["when"] is not None and not flags.get(x["when"]):
+            continue
+        if in_scope and not x["required"] and x["experts"] and not (set(x["experts"]) & in_scope):
+            continue
+        out.append(x)
+    return out
 
 
 def derive_risk_profile(answers):
