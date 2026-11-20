@@ -97,10 +97,61 @@ Times are after the fixes, on the build machine.
 
 **Honest limits of this round.** Five projects, all well-maintained open-source libraries or templates, none of them a private business application, none larger than about 7,000 files. Only the engine ran. Projects' own tests were not run. A defect list from five projects is a sample, not a guarantee for the sixth.
 
+## Round 5 — full review of an independent real project (v0.6.0)
+
+One agent ran the whole skill on `fastapi/full-stack-fastapi-template` at commit 77e550a: all 23 experts, the research workflow, two approved changes, and Phase 4. Intake answers were those of a hypothetical team using the template for an internal dashboard ("simulated owner"). The agent was not allowed to install the project's dependencies or run its code, tests, builds or containers, because the build machine holds credentials; it could use tools that only read files.
+
+| | |
+|---|---|
+| Engine decision | NO-GO, 50/100, before and after the two changes (risk profile: sensitive) |
+| Why | Eight core areas under the blocking score, among them Disaster Recovery 15, Incidents 25, Observability 28 |
+| Findings | 49: no Critical, 7 High (1 fixed), 29 Medium, 12 Low, 1 Info |
+| Areas | 22 partial, 1 not assessed (Cost), none fully assessed |
+| Checks | 162: 57 pass, 48 fail, 57 not assessed |
+| Evidence | 114 records: 19 verified, 92 observed, 2 inferred, 1 broken (an engine bug, see below) |
+| Research | 6 questions, 7 official sources, 3 proposals: 1 verified, 1 awaiting decision, 1 set aside |
+| Changes | 2 commits on a branch: the database admin UI removed from the deployment model (a High finding); a rate limit on the login paths (a proposal) |
+| Cost | 383,569 tokens, 24 minutes, 63 tool calls |
+
+**The most important findings it reported about the project** (not checked by a person): no backup of the database volume and no tested restore; open self-registration on what the team described as an internal tool; the database admin UI routed publicly in the deployment file; no protection against password guessing; deploys not gated on tests and with no rollback.
+
+**What the run shows.**
+
+- The workflow completes on a real multi-language project that the skill's author did not write, and `validate` accepts the result.
+- The research rules held under real use: both deliberate attempts to break them (a proposal without sources; `verified` straight from `approved`) were refused. One library was not proposed because its package page did not list the Python version the project requires.
+- One proposal went the whole way: approval, a change on a branch, a failing baseline probe, a passing re-check, `verified`.
+- The reviewer judged the reference sections sufficient for 12 experts, thin for 9 and not useful for 2 (Cost, Analytics) on this project. Thin sections share a cause: they assume something can be run.
+
+**Defects it found in the skill and engine.** 23 were reported. Fixed in v0.6.1, each with a regression test:
+
+1. Bun projects were treated as npm with "no lockfile"; uv projects got bare `pytest` and `mypy` and no audit route.
+2. A database driver loaded by name was reported as "declared but not imported".
+3. A connection string whose password is a `${VARIABLE}` was flagged as a committed secret.
+4. `graph` found 1 edge and no tables: it did not resolve packages inside a service folder (`backend/app`) and did not read SQLModel or SQLAlchemy models. It now finds 24 edges and both tables.
+5. A relative `--output` path was refused after the record had been started, leaving a permanently broken record.
+6. The commit was not recorded when a check ran from a subfolder.
+7. "Evidence basis: Verified" appeared for areas where one shared run was the only thing executed. The scorecard now says how many of the area's checks were run.
+8. The scorecard did not say which commit it described. It now lists the commits its evidence was recorded at.
+9. There was no way to record "not now" for a proposal; the reviewer recorded a deferral as a rejection. `deferred` exists now.
+10. `research-log.md` claimed that nothing was quoted from memory, which the engine cannot know. It now states what the engine checks and what it cannot.
+11. A search that found nothing was documented ambiguously; the rule is now explicit, and a search that failed for another reason no longer backs a pass.
+12. Smaller: notes can be shared when written; caches are left out of the delivery package; the intake has a "read-only tools only" answer; guidance on when to look up sources and how to spend a page limit.
+
+**Reported and not fixed.** The capability matrix lists checks as available without regard to the intake answers or whether dependencies are installed. Any check that could not run makes an area "partial", so under a no-execution rule nothing can be "assessed" and the conditions list repeats itself. A workspace root with no code of its own is listed as a stack. The deliverable template asks for a field to be filled in after scoring. Process findings have no natural authoritative source. Reference sections for Performance, Scalability, QA, Infrastructure (Compose and proxies), UI/UX, Business Logic, Compliance and Technical Leadership give little for a review that cannot run anything.
+
+**Honest limits of this round.**
+
+- One run, one agent, the same model that wrote the skill. No person has read the 23 deliverables or checked the findings against the project.
+- The project's code was never run: no test result, benchmark, restore or live request exists. Only 19 of 114 evidence records are from something executed, and those are linters, audits, `docker compose config` and the reviewer's own probes.
+- The owner was simulated. A real owner would have answered the intake differently and might have rejected both changes.
+- The reviewer reported its own shortcuts: all 23 deliverables were generated in one batch from a data file after the evidence was gathered; UI/UX, Analytics and Compliance were read lightly; 14 dependency advisories were not triaged; the remediation was reviewed by the agent that wrote it; the rate limit was verified as configuration, never exercised.
+- The edit guard was not active (the skill was used from its folder, not installed as a plugin).
+- It is a template, not a product with users and data, and it is about 250 files.
+
 ## Not yet evaluated
 
-- The full expert review (the model-driven part) on a real project that is not this one, and on anything large. Round 4 covers the engine only.
-- The research workflow in a model-driven run, and a proposal taken from approval through build to verification on a real project.
+- The full expert review on a large project, on a private business application, and with the project's own tests and build actually run. Round 5 is one mid-sized template, reviewed without execution.
+- A real owner answering the intake and deciding on proposals.
 - Repeat runs (variance), and a person judging the quality of the deliverables.
 - Whether a genuinely production-ready project reaches GO.
 - `references/project-types.md` and the other guidance added in v0.5.0.

@@ -241,7 +241,7 @@ def discover(root, exclude=()):
     d["declared_not_used"] = sorted(
         {label for hints, found in ((AI_HINTS, d["ai_libraries"]), (FRAMEWORK_HINTS, d["frameworks"] & API_FRAMEWORKS),
                                     (DB_HINTS, d["database"]["tools"]), (PAID_HINTS, d["paid_services"]))
-         for label in found if not used(hints, {label})})
+         for label in found if not label.endswith("driver") and not used(hints, {label})})
     if any("node --test" in str(v) for v in d["scripts"].values()) or re.search(r"""['"]node:test['"]""", blob):
         d["test_frameworks"].add("node:test")
     # `from unittest.mock import ...` is a helper used under any runner; it does not make unittest the framework.

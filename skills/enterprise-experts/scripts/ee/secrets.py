@@ -11,7 +11,7 @@ SECRET_PATTERNS = [
     ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9\-]{10,}\b")),
     ("JWT", re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b")),
     ("Connection string with password",
-     re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s:/@'\"]+:([^\s@'\"]{3,})@")),
+     re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s:/@'\"]+:((?!\$\{|\$[A-Z_]|\{\{|%\(|<)[^\s@'\"]{3,})@")),
     ("Hardcoded credential assignment", re.compile(
         r"(?i)\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key)\b"
         r"\s*[:=]\s*['\"]([^'\"\s$<{]{8,})['\"]")),

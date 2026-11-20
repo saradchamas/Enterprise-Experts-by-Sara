@@ -156,6 +156,18 @@ class Lifecycle(ResearchCase):
         problems = research.check(self.review, today=TODAY)["problems"][p["id"]]
         self.assertTrue(any("without a recorded approval" in x for x in problems))
 
+    def test_not_now_is_recorded_as_deferred_and_can_still_be_approved(self):
+        s = self.source()
+        p = self.proposal([s["id"]])
+        with self.assertRaises(ValueError):
+            research.decide(self.review, p["id"], "deferred")
+        research.decide(self.review, p["id"], "deferred", reason="waiting for the hosting decision")
+        research.write_log(self.review, today=TODAY)
+        text = (self.review / "research-log.md").read_text(encoding="utf-8")
+        self.assertIn("status **deferred**", text)
+        self.assertIn("waiting for the hosting decision", text)
+        self.assertEqual(research.decide(self.review, p["id"], "approved", by="Sara", today=TODAY)["status"], "approved")
+
     def test_rejection_needs_a_reason(self):
         s = self.source()
         p = self.proposal([s["id"]])

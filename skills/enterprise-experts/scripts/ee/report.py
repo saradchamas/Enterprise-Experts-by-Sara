@@ -15,6 +15,11 @@ def to_markdown(res):
          f"**Decision: {_title(res)}**  |  **Overall score: {res['overall'] if res['overall'] is not None else 'n/a'}/100**"
          f"  |  Review date: {res.get('review_date') or '?'}  |  Mode: {res.get('mode') or '?'}"
          f"  |  Risk profile: {res.get('risk_profile') or '?'}", ""]
+    if res.get("commits"):
+        o += ["Evidence was recorded at: " + ", ".join(f"commit `{c}` ({n} records)" for c, n in
+                                                      sorted(res["commits"].items(), key=lambda x: -x[1]))
+              + (". More than one commit: the review spans a change, so check which records each conclusion cites."
+                 if len(res["commits"]) > 1 else "."), ""]
     if not res["valid"]:
         o += ["## Validation errors", "",
               "The decision engine is fail-closed: until every error below is fixed, the only possible result is NO-GO.", ""]
@@ -24,8 +29,9 @@ def to_markdown(res):
     o += ["| # | Area | Status | Expert score | Final score | Cap / reason | Unresolved Critical | Open High | Evidence basis |",
           "|---|---|---|---|---|---|---|---|---|"]
     for r in res["rows"]:
-        o.append("| {id} | {name}{star} | {status} | {score} | {final} | {caps} | {critical} | {high} | {basis} |".format(
-            star=" ★" if r["core"] else "", **{k: ("—" if v is None else v) for k, v in r.items()}))
+        o.append("| {id} | {name}{star} | {status} | {score} | {final} | {caps} | {critical} | {high} | {shown} |".format(
+            star=" ★" if r["core"] else "", shown=r.get("basis_detail") or r["basis"],
+            **{k: ("—" if v is None else v) for k, v in r.items()}))
     o += ["", f"★ = core area for a {res['risk_profile']} project (weight 2; for GO it must be assessed, backed by "
           f"Verified evidence and score at least {gate['go_score']}).", ""]
     if res.get("notes"):

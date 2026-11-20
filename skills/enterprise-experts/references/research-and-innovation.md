@@ -23,6 +23,12 @@ Start from the project, not from the news. Build the list from:
 
 Write the list down in `21-technology-strategy.md` before searching, so the search stays tied to it. Six to twelve questions is typical for a full review; three or four for a quick one.
 
+## When to do it
+
+Sources for findings are needed as you write each High or Critical finding, in every wave, so do those look-ups then and record them with `EE research add` straight away. The wider scan in this file (versions, tooling gaps, integrations) runs in the Synthesis wave, when all findings are known.
+
+If the user limited how many pages you may read, spend them first on Critical findings, then High, then the scan. For every High finding left without a source, write "source not checked (limit reached)" in its recommendation; do not fill the gap from memory.
+
 ## Step 2 — Search, within the privacy answer
 
 - `yes_generic_searches_only`: search for technologies and versions only ("PostgreSQL 16 end of life", "FastAPI background tasks alternatives"). Do not put the project's name, client names, code, internal URLs or error text containing identifiers into a search or a fetch.
@@ -83,6 +89,8 @@ Present the proposals; do not start on any of them. For each the user accepts or
 EE research decide --review <review> --id P-001 --status approved --by "<their name>" --paths "db/*" "docker-compose.yml"
 EE research decide --review <review> --id P-002 --status rejected --reason "<why, in their words>"
 ```
+
+"Not now" is not "no": when the user wants to wait, use `--status deferred --reason "<what it is waiting for>"`. A deferred proposal stays open and can be approved or rejected later. Record `rejected` only when the user said no.
 
 Approval with `--paths` also records the approval the edit guard checks, so the change can touch those files and no others. Installing a tool, adding an MCP server, creating an account, calling a paid model or sending data to a provider each need their own explicit yes; an approved proposal does not imply them.
 

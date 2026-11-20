@@ -22,7 +22,7 @@ NEEDS_OFFICIAL = frozenset({"model", "mcp", "tool", "dataset"})
 FAST_MOVING = frozenset({"technology", "model", "mcp", "tool", "dataset"})
 ACTIONS = ("adopt", "replace", "upgrade", "remove", "configure")
 EFFORTS = ("S", "M", "L")
-STATUSES = ("proposed", "approved", "rejected", "implemented", "verified")
+STATUSES = ("proposed", "approved", "rejected", "deferred", "implemented", "verified")
 DEFAULT_MAX_AGE_DAYS = 90
 URL_RX = re.compile(r"^https?://[^\s/]+\.[^\s/]+", re.I)
 
@@ -170,8 +170,8 @@ def decide(review_dir, proposal_id, status, by=None, reason=None, paths=(), evid
     p = _find(data, proposal_id)
     entry = {"status": status, "at": _now()}
     if status == "approved":
-        if p["status"] != "proposed":
-            raise ValueError(f"{proposal_id} is {p['status']}; only a proposed item can be approved")
+        if p["status"] not in ("proposed", "deferred"):
+            raise ValueError(f"{proposal_id} is {p['status']}; only a proposed or deferred item can be approved")
         if not (by or "").strip():
             raise ValueError("an approval needs --by <who approved it>")
         blocking = [m for m in _proposal_problems(p, data, review_dir, max_age_days, today or date.today())]
@@ -183,6 +183,13 @@ def decide(review_dir, proposal_id, status, by=None, reason=None, paths=(), evid
     elif status == "rejected":
         if not (reason or "").strip():
             raise ValueError("a rejection needs --reason")
+        entry.update(by=(by or "").strip() or None, reason=reason.strip())
+    elif status == "deferred":
+        # "Not now" is not "no": the proposal stays open and can still be approved or rejected later.
+        if p["status"] != "proposed":
+            raise ValueError(f"{proposal_id} is {p['status']}; only a proposed item can be deferred")
+        if not (reason or "").strip():
+            raise ValueError("deferring needs --reason (what it is waiting for)")
         entry.update(by=(by or "").strip() or None, reason=reason.strip())
     elif status == "implemented":
         if p["status"] != "approved":
@@ -217,7 +224,7 @@ def _proposal_problems(p, data, review_dir, max_age_days, today):
     if p.get("category") in NEEDS_OFFICIAL and not any(s.get("official") for s in sources):
         problems.append(f"a {p['category']} proposal needs at least one official source "
                         "(the vendor's or maintainer's own documentation, registry page or repository)")
-    if p.get("category") in FAST_MOVING and p.get("status") in ("proposed", "approved"):
+    if p.get("category") in FAST_MOVING and p.get("status") in ("proposed", "deferred", "approved"):
         newest = max(_day(s["retrieved"], "retrieved") for s in sources)
         age = (today - newest).days
         if age > max_age_days:
@@ -268,8 +275,9 @@ def write_log(review_dir, max_age_days=DEFAULT_MAX_AGE_DAYS, today=None):
     lines = ["# Research and proposals", "",
              f"Checked on {result['checked_on']}. Sources for fast-moving facts (models, tools, MCP servers, "
              f"technology versions, datasets) count for {max_age_days} days after they were read.", "",
-             "Every statement below comes from a page that was read on the date shown. "
-             "Nothing here is quoted from memory.", ""]
+             "Each source below was recorded by the reviewer with its URL and the date it was read. The engine "
+             "checks that sources exist, are dated and are cited; it cannot check that a page says what the claim "
+             "states. Open the link before acting on a proposal.", ""]
 
     def block(p):
         serves = ", ".join(p.get("findings") or []) or f"goal: {p.get('goal')}"
@@ -286,11 +294,16 @@ def write_log(review_dir, max_age_days=DEFAULT_MAX_AGE_DAYS, today=None):
             if s:
                 out.append(f"- {sid} ({'official' if s.get('official') else 'third party'}, read {s['retrieved']}): "
                            f"{s['claim']} — {s['url']}")
+        last = p.get("history", [{}])[-1]
+        if p["status"] in ("rejected", "deferred") and last.get("reason"):
+            out.append(f"- Reason: {last['reason']}")
         for problem in result["problems"].get(p["id"], []):
             out.append(f"- **Problem:** {problem}")
         return out + [""]
 
     good = [p for p in data["proposals"] if p["id"] in result["supported"] and p["status"] != "rejected"]
+    order = {"verified": 0, "implemented": 1, "approved": 2, "proposed": 3, "deferred": 4}
+    good.sort(key=lambda p: order.get(p["status"], 9))
     bad = [p for p in data["proposals"] if p["id"] not in result["supported"]]
     rejected = [p for p in data["proposals"] if p["id"] in result["supported"] and p["status"] == "rejected"]
     lines += ["## Proposals that are supported", ""]

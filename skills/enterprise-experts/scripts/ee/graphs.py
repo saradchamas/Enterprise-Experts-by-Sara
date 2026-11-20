@@ -13,6 +13,9 @@ JS_EXT = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte"}
 CREATE_TABLE = re.compile(r"(?is)create\s+table\s+(?:if\s+not\s+exists\s+)?[`\"\[]?([\w.]+)[`\"\]]?\s*\((.*?)\)\s*;")
 REFERENCES = re.compile(r"(?i)references\s+[`\"\[]?([\w.]+)[`\"\]]?")
 MAX_DRAWN_EDGES = 120
+# SQLModel (`class Item(Base, table=True):`) and SQLAlchemy declarative classes (`__tablename__ = "item"`).
+ORM_CLASS = re.compile(r"(?m)^class\s+(\w+)\(([^)]*)\):\n((?:[ \t]+.*\n|\n)+)")
+ORM_FIELD = re.compile(r"^[ \t]+(\w+)\s*(?::\s*([\w.\[\] |]+?)\s*(?:=|$)|=\s*(?:Column|mapped_column)\()")
 PRISMA_MODEL = re.compile(r"(?s)\bmodel\s+(\w+)\s*\{(.*?)\}")
 
 
@@ -42,7 +45,13 @@ def dependency_graph(root, depth=2):
     """Edges between directories (to `depth` levels), from import statements."""
     root = Path(root).resolve()
     files = [p for p in _files(root) if p.suffix in JS_EXT | {".py"}]
+    # Top-level packages live at the root, under src/ or lib/, or one level down in a service folder
+    # (backend/app, services/api/src/...). Each is a place an absolute import can start from.
     bases = [root / r for r in PY_ROOTS if (root / r).is_dir()]
+    for sub in sorted(p for p in root.iterdir() if p.is_dir() and p.name not in SKIP_DIRS | FIXTURE_DIRS
+                      and not p.name.startswith(".")):
+        if any((sub / m).exists() for m in ("pyproject.toml", "requirements.txt", "setup.py", "setup.cfg", "Pipfile")):
+            bases += [b for b in (sub, sub / "src") if b.is_dir()]
     tops = {b: {c.name.removesuffix(".py") for c in b.iterdir() if c.is_dir() or c.suffix == ".py"} for b in bases}
     edges, scanned = defaultdict(int), 0
     for path in files:
@@ -183,6 +192,30 @@ def database_model(root):
                 tables[name], hit = cols, True
             if hit:
                 sources.append(path.relative_to(root).as_posix())
+        elif path.suffix == ".py":
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            if "table=True" not in text and "__tablename__" not in text:
+                continue
+            hit = False
+            for m in ORM_CLASS.finditer(text):
+                name, bases_text, body = m.group(1), m.group(2), m.group(3)
+                explicit = re.search(r"__tablename__\s*=\s*['\"](\w+)['\"]", body)
+                if not explicit and not re.search(r"table\s*=\s*True", bases_text):
+                    continue
+                table = explicit.group(1) if explicit else name.lower()      # SQLModel's default table name
+                cols = []
+                for line in body.splitlines():
+                    col = ORM_FIELD.match(line)
+                    if not col or col.group(1).startswith("_"):
+                        continue
+                    if re.search(r"\b(?:R|r)elationship\(", line):
+                        continue
+                    cols.append((col.group(1), re.sub(r"\W.*", "", col.group(2) or "") or "column"))
+                for ref in re.findall(r"(?:foreign_key\s*=\s*|ForeignKey\(\s*)['\"]([\w.]+)['\"]", body):
+                    relations.add((table, ref.split(".")[0]))      # a Field(...) call may span several lines
+                tables[table], hit = cols, True
+            if hit:
+                sources.append(path.relative_to(root).as_posix())
         elif path.name == "schema.prisma":
             text = path.read_text(encoding="utf-8", errors="ignore")
             models = dict(PRISMA_MODEL.findall(text))
@@ -244,7 +277,8 @@ def write(root, out_dir, depth=2):
     if db["tables"]:
         lines = ["# Database entity-relationship diagram", "",
                  f"**Evidence level: Observed** — parsed from {', '.join(db['sources'])}. It shows the schema as "
-                 "written in these files, which may differ from the live database.", "", "```mermaid", "erDiagram"]
+                 "written in these files, which may differ from the live database. For Python models, columns a class "
+                 "inherits from a base class are not shown.", "", "```mermaid", "erDiagram"]
         for table, cols in db["tables"].items():
             lines.append(f"  {_id(table)} {{")
             lines += [f"    {_id(ctype) or 'unknown'} {_id(col)}" for col, ctype in cols]
