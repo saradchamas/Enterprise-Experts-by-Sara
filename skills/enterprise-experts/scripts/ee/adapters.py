@@ -30,7 +30,7 @@ def _node(d, root):
     pm = "npm"
     for base in (d, root):
         for lock, name in (("pnpm-lock.yaml", "pnpm"), ("yarn.lock", "yarn"), ("bun.lockb", "bun"),
-                           ("package-lock.json", "npm")):
+                           ("bun.lock", "bun"), ("package-lock.json", "npm")):
             if (base / lock).exists():
                 pm = name
                 break
@@ -38,7 +38,7 @@ def _node(d, root):
             continue
         break
     has_lock = any((b / f).exists() for b in (d, root)
-                   for f in ("pnpm-lock.yaml", "yarn.lock", "bun.lockb", "package-lock.json"))
+                   for f in ("pnpm-lock.yaml", "yarn.lock", "bun.lockb", "bun.lock", "package-lock.json"))
     cmds, missing = {}, {}
     real_test = scripts.get("test") and "no test specified" not in scripts["test"]
     cmds["install"] = {"npm": ["npm", "ci"], "pnpm": ["pnpm", "install", "--frozen-lockfile"],
@@ -46,7 +46,8 @@ def _node(d, root):
         if has_lock else None
     if not has_lock:
         missing["install"] = "no lockfile, so a reproducible install is not possible"
-    cmds["test"] = [pm, "test"] if real_test else None
+    # `bun test` is Bun's own runner; the project's script is `bun run test`.
+    cmds["test"] = ([pm, "run", "test"] if pm == "bun" else [pm, "test"]) if real_test else None
     if not real_test:
         missing["test"] = "package.json has no real test script"
     for name in ("build", "lint"):
@@ -56,12 +57,13 @@ def _node(d, root):
     if scripts.get("typecheck"):
         cmds["typecheck"] = [pm, "run", "typecheck"]
     elif (d / "tsconfig.json").exists():
-        cmds["typecheck"] = ["npx", "--no-install", "tsc", "--noEmit"]
+        cmds["typecheck"] = (["bunx", "--no-install", "tsc", "--noEmit"] if pm == "bun"
+                             else ["npx", "--no-install", "tsc", "--noEmit"])
     else:
         cmds["typecheck"], missing["typecheck"] = None, "not a TypeScript project"
     if has_lock:
         cmds["audit"] = {"npm": ["npm", "audit", "--omit=dev", "--json"], "pnpm": ["pnpm", "audit", "--prod", "--json"],
-                         "yarn": ["yarn", "audit", "--json"], "bun": ["npm", "audit", "--omit=dev", "--json"]}[pm]
+                         "yarn": ["yarn", "audit", "--json"], "bun": ["bun", "audit", "--json"]}[pm]
     else:
         cmds["audit"], missing["audit"] = None, "the dependency audit needs a lockfile, and there is none"
     return {"adapter": "node", "label": f"JavaScript/TypeScript ({pm})", "tools": ["node", pm], "commands": cmds,
@@ -75,12 +77,15 @@ def _python(d, root):
     text = "\n".join(_read(d / f) for f in ("pyproject.toml", "requirements.txt", "requirements-dev.txt",
                                             "Pipfile", "setup.cfg", "tox.ini")).lower()
     has_tests = (d / "tests").is_dir() or (d / "test").is_dir() or "pytest" in text
+    # A uv project runs its tools inside the locked environment; bare `pytest` or `mypy` would use this machine's.
+    uv = (d / "uv.lock").exists() or (root / "uv.lock").exists()
+    run = ["uv", "run", "--frozen"] if uv else []
     cmds, missing = {"install": None, "build": None, "typecheck": None}, {
         "install": "installing Python dependencies changes the environment; do it in a virtualenv with approval",
         "build": "no build step for this stack"}
     test_dir = next((n for n in ("tests", "test") if (d / n).is_dir()), None)
     if "pytest" in text:
-        cmds["test"] = ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+        cmds["test"] = (run or ["python", "-m"]) + ["pytest", "-q", "-p", "no:cacheprovider"]
     elif test_dir:
         cmds["test"] = ["python", "-m", "unittest", "discover", "-s", test_dir, "-t", "."]
     else:
@@ -91,17 +96,23 @@ def _python(d, root):
     if not cmds["lint"]:
         missing["lint"] = "no linter configured"
     if "mypy" in text:
-        cmds["typecheck"] = ["mypy", "--cache-dir", os.devnull, "."]
+        cmds["typecheck"] = run + ["mypy", "--cache-dir", os.devnull, "."]
     else:
         missing["typecheck"] = "no type checker configured"
     req = next((f for f in ("requirements.txt", "requirements.lock", "requirements-prod.txt") if (d / f).exists()), None)
     if req:
         cmds["audit"] = ["pip-audit", "-r", req, "-f", "json"]
+    elif uv:
+        cmds["audit"] = None
+        missing["audit"] = ("uv.lock cannot be read by pip-audit directly. With approval, export the locked versions "
+                            "(`uv export --frozen --no-emit-project --no-hashes -o <review>/requirements-locked.txt`) "
+                            "and run `pip-audit -r` on that file")
     else:
         cmds["audit"] = None
         missing["audit"] = ("no requirements file to audit: a bare `pip-audit` would audit this machine's own "
                             "packages, not the project's. Export a requirements or lock file first")
-    return {"adapter": "python", "label": "Python", "tools": ["python", "pip-audit"], "commands": cmds,
+    return {"adapter": "python", "label": "Python (uv)" if uv else "Python",
+            "tools": ["python", "pip-audit"] + (["uv"] if uv else []), "commands": cmds,
             "unavailable": missing,
             "limitations": ["Tests need the project's dependencies installed.",
                             "pip-audit sends package names and versions to a public advisory service."]}

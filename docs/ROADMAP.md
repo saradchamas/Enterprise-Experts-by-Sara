@@ -1,6 +1,6 @@
 # Roadmap to v1.0
 
-Status as of v0.6.0. Enterprise Experts is one reusable skill with a local engine; it is not a hosted product, and no dashboard, server or database is planned. "Tested" means an automated test or a recorded run exists; anything else is stated as not done.
+Status as of v0.6.1. Enterprise Experts is one reusable skill with a local engine; it is not a hosted product, and no dashboard, server or database is planned. "Tested" means an automated test or a recorded run exists; anything else is stated as not done.
 
 ## What v0.5.0 covers
 
@@ -54,8 +54,8 @@ Eight met (one of them locally only), three partly, one waiting for a tag.
 
 ## Known limitations
 
-- **Evaluation is thin.** Six model-driven runs, one each, by agents rather than people, on small samples and on this repository. The engine alone has been run on five real open-source projects; the full expert review has not been run on an independent real project. No repeat runs, no human judgment of whether the reports are good.
-- **Research and proposals are new.** The engine rules are tested and the workflow was exercised once, by hand, on one real project with two official sources. No model-driven run of the research workflow has been evaluated, and no proposal has yet been approved, built and verified on a real project.
+- **Evaluation is still thin.** Seven model-driven runs, one each, by agents rather than people. One of them is a full 23-expert review of an independent real project (the FastAPI full-stack template), done without running that project's code. No repeat runs, no large or private project, and no human judgment of whether the reports are good.
+- **Research and proposals have run once.** In the full review of the FastAPI template: 6 questions, 7 official sources, 3 proposals, one carried from approval through a change on a branch to a passing check. The approval came from a simulated owner, every page was read through a summarising tool, and the change was verified at configuration level only, never against a running system.
 - **On small projects the skill finds what the model finds anyway.** Its measured contribution so far is structure, an evidence trail and a rule-based decision, at 200,000 to 300,000 tokens per run.
 - **A clean small project did not reach GO.** Without a Critical or High finding the decision rests on the reviewer's own area scores against a fixed gate. The scorecard now says so; whether the gates are right for small or early projects is an open question for the owner.
 - **The engine validates form, not truth.** It proves a command ran and what it printed. It cannot tell whether that command was a meaningful test, whether a score is fair, or whether a cited source says what the report claims.

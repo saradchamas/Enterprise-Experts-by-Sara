@@ -47,9 +47,14 @@ def sha256_file(path):
 def git_commit(project_dir):
     """Read the checked-out commit without needing the git binary."""
     try:
-        git = Path(project_dir) / ".git"
+        start = Path(project_dir).resolve()
+        if not start.exists():
+            return None
+        # A check is often run from a subfolder (backend/, the review folder): the repository is above it.
+        top = next((p for p in (start, *start.parents) if (p / ".git").exists()), start)
+        git = top / ".git"
         if git.is_file():  # worktree / submodule pointer
-            git = (Path(project_dir) / git.read_text().split(":", 1)[1].strip()).resolve()
+            git = (top / git.read_text().split(":", 1)[1].strip()).resolve()
         head = (git / "HEAD").read_text().strip()
         if not head.startswith("ref:"):
             return head[:40]
@@ -193,6 +198,13 @@ def run_command(review_dir, area, title, argv, cwd=".", timeout=900, approved=Fa
         raise PermissionError(
             f"Refused: this command {reason}. Get the user's explicit approval, then re-run with --approved.")
     review = Path(review_dir)
+    declared = []
+    for out in outputs:          # checked before anything is recorded, so a bad path leaves no half-made record
+        path = Path(out)
+        path = (path if path.is_absolute() else review / path).resolve()
+        if review.resolve() not in path.parents:
+            raise ValueError(f"--output must be inside the review folder (absolute, or relative to it): {out}")
+        declared.append(path)
     (review / "evidence").mkdir(parents=True, exist_ok=True)
     # Reserve the id first, so runs started in parallel never share one.
     eid = _append(review, lambda i: {"id": i, "kind": "pending", "area": area, "title": title})["id"]
@@ -229,10 +241,7 @@ def run_command(review_dir, area, title, argv, cwd=".", timeout=900, approved=Fa
         # Files the command was meant to produce (a screenshot, a report). They become part of
         # the record: a missing or later-modified output makes the record unusable.
         record["outputs"] = []
-        for out in outputs:
-            path = Path(out).resolve()
-            if review.resolve() not in path.parents:
-                raise ValueError(f"--output must be inside the review folder: {out}")
+        for path in declared:
             rel = path.relative_to(review.resolve()).as_posix()
             record["outputs"].append({"path": rel, "sha256": sha256_file(path) if path.is_file() else None})
     state = worktree_state(project or cwd)
@@ -257,9 +266,11 @@ def share(review_dir, evidence_id, areas):
     return rec
 
 
-def add_note(review_dir, area, title, kind, detail, location=None, project_dir=None):
+def add_note(review_dir, area, title, kind, detail, location=None, project_dir=None, also_areas=()):
     """Record something read in the code (observation) or reasoned (inference)."""
     _check_area(area)
+    for extra in also_areas:
+        _check_area(extra)
     if kind not in ("observation", "inference"):
         raise ValueError("kind must be observation or inference")
     if kind == "observation" and not location:
@@ -279,6 +290,8 @@ def add_note(review_dir, area, title, kind, detail, location=None, project_dir=N
         record["location_exists"] = target.exists()
         if not target.exists():
             raise ValueError(f"location does not exist in the project: {location}")
+    if set(also_areas) - {area}:
+        record["also_areas"] = sorted(set(also_areas) - {area})
     return _append(review, lambda i: dict(record, id=i))
 
 

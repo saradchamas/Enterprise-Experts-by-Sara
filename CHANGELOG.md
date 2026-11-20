@@ -2,6 +2,31 @@
 
 Versions follow [Semantic Versioning](https://semver.org). Until 1.0.0, minor versions may change the review file formats; each such change is listed under "Breaking".
 
+## [0.6.1] - 2026-11-20
+
+Driven by a full 23-expert review of an independent real project (`docs/EVALUATION.md`, round 5).
+
+### Fixed
+- Bun projects (`bun.lock`) are no longer treated as npm without a lockfile; they get `bun install --frozen-lockfile`, `bun run test`, `bun audit`.
+- uv projects run their tools through `uv run --frozen`, and the audit entry explains how to export `uv.lock` for `pip-audit`.
+- A database driver loaded by name (URL scheme, ORM configuration) is no longer reported as declared but unused.
+- A connection string whose password is an interpolated variable is no longer flagged as a secret.
+- `graph` resolves Python packages inside a service folder and reads SQLModel and SQLAlchemy models into the ERD.
+- A refused `--output` path no longer leaves a broken evidence record; a relative path is taken as relative to the review folder.
+- The commit is recorded when a check runs from a subfolder of the repository.
+- A read-only command that failed (missing file, bad option) no longer backs a pass. A search that found nothing still does.
+- Caches are left out of the delivery package.
+
+### Added
+- The scorecard shows, per area, how many checks rest on something that was run, and the commits its evidence was recorded at.
+- Proposal status `deferred`, with a reason; the research log shows reasons for deferred and rejected proposals.
+- `evidence note --also` shares a note when it is written.
+- Intake answers `run_project_tests` and `read_only_tools_only` for what may be executed.
+
+### Changed
+- `research-log.md` states what the engine checks about sources and what it cannot.
+- Guidance: look up sources for High and Critical findings as they are written; how to spend a limited page budget.
+
 ## [0.6.0] - 2026-11-20
 
 ### Added

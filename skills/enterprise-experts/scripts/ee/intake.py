@@ -46,9 +46,10 @@ QUESTIONS = [
     q("environments_allowed", "Which environments may I run things against? (choose all that apply)", "multi",
       ["none_read_code_only", "local", "staging"], True, experts=[3, 4, 5, 9],
       why="Load, resilience and E2E tests only run where you allow. Production is never a test target."),
-    q("execution_allowed", "Besides reading the code and running its own tests, may I: install the project's dependencies, "
-      "use Docker, run tools that contact the network (for example a dependency audit)? (choose all that apply)", "multi",
-      ["install_dependencies", "use_docker", "network_tools", "none"], experts=[2, 9, 10],
+    q("execution_allowed", "Besides reading the code, may I: run the project's own tests and build, install its dependencies, "
+      "use Docker, run tools that contact the network (for example a dependency audit)? Or only tools that read "
+      "the files without running the project's code? (choose all that apply)", "multi",
+      ["run_project_tests", "install_dependencies", "use_docker", "network_tools", "read_only_tools_only", "none"], experts=[2, 9, 10],
       why="Each one changes something or sends something out; without your yes those checks are recorded as not assessed."),
     q("critical_journeys", "What are the 3-5 things that must never break (e.g. login, checkout, report export)?",
       experts=[5, 9, 13, 16], why="Tests, SLOs and UX review focus on these."),

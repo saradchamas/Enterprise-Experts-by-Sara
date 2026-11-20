@@ -104,7 +104,7 @@ def cmd_evidence(a):
             raise ValueError("evidence share needs --id E-0xx and --also <areas>")
         rec = evidence.share(a.review, a.id, a.also)
     elif a.action == "note":
-        rec = evidence.add_note(a.review, a.area, a.title, a.kind, a.detail, a.location, a.project)
+        rec = evidence.add_note(a.review, a.area, a.title, a.kind, a.detail, a.location, a.project, a.also)
     else:
         log = evidence.load_log(a.review)
         if a.json:

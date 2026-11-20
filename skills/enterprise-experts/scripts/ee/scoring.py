@@ -65,10 +65,18 @@ class _Evidence:
         level, _ = self.level(eid)
         rec = self.by_id.get(eid, {})
         if level == "observed":
-            return True
+            # A captured search that found nothing (exit 1 from grep and its relatives) is a clean result.
+            # Any other failure of a read-only command (a missing file, a bad option) shows nothing.
+            if rec.get("kind") != "command":
+                return True
+            code = rec.get("exit_code")
+            return code == 0 or (code == 1 and bool(SEARCH_TOOL.match(rec.get("command", ""))))
         # A command that failed, timed out or could not start shows a failure. It can back a
         # "fail" check or a finding, never a "pass".
         return level == "verified" and not rec.get("timed_out") and rec.get("exit_code") == 0
+
+
+SEARCH_TOOL = re.compile(r"^\s*(?:grep|egrep|fgrep|rg|ag|git\s+grep)\b")
 
 
 def _refs(value, where, errors, ev, area_id, levels, require=True):
@@ -253,7 +261,19 @@ def validate(review_dir):
     if missing:
         errors.append("required areas missing for a %s review: %s" %
                       (mode, ", ".join(f"{a} {AREAS[a]}" for a in missing)))
-    return data, intake, {"risk": risk, "area_levels": area_levels, "required": required}, errors
+    ran = {}
+    for area in data.get("areas", []) if isinstance(data.get("areas"), list) else []:
+        if not isinstance(area, dict) or not isinstance(area.get("checks"), list):
+            continue
+        done = [c for c in area["checks"] if isinstance(c, dict) and c.get("result") in ("pass", "fail")]
+        backed = [c for c in done if any(ev.level(e)[0] == "verified" for e in c.get("evidence") or [] if isinstance(e, str))]
+        ran[area.get("id")] = (len(backed), len(done))
+    commits = {}
+    for rec in ev.by_id.values():
+        if rec.get("commit"):
+            commits[rec["commit"][:7]] = commits.get(rec["commit"][:7], 0) + 1
+    return data, intake, {"risk": risk, "area_levels": area_levels, "required": required, "ran": ran,
+                          "commits": commits}, errors
 
 
 def _matrix_overrides(review_dir, data):
@@ -276,7 +296,7 @@ def evaluate(review_dir):
     result = {"valid": not errors, "errors": errors, "decision": "NO-GO", "overall": None, "rows": [],
               "blockers": [], "conditions": [], "notes": [], "project": (data or {}).get("project"),
               "review_date": (data or {}).get("review_date"), "mode": (data or {}).get("mode"),
-              "risk_profile": ctx.get("risk"), "exit_code": EXIT["INVALID"]}
+              "risk_profile": ctx.get("risk"), "exit_code": EXIT["INVALID"], "commits": ctx.get("commits", {})}
     if errors:
         result["blockers"] = ["The review is INVALID and cannot support a release decision. Fix the errors and re-run."]
         return result
@@ -316,6 +336,9 @@ def evaluate(review_dir):
             limits.append((70, f"{len(high_open)} open High"))
         if "verified" in levels:
             basis = "Verified"
+            # "Verified" alone hides how much of the area was actually run. Say it.
+            backed, total = ctx.get("ran", {}).get(aid, (0, 0))
+            basis_detail = f"Verified ({backed} of {total} checks were run)"
         elif "observed" in levels:
             basis = "Observed only"
             limits.append((75, "nothing was run (no Verified evidence)"))
@@ -332,7 +355,8 @@ def evaluate(review_dir):
         wtot += weight
         rows.append({"id": aid, "name": name, "core": is_core, "status": status, "score": area["score"],
                      "final": round(final), "caps": "; ".join(caps), "critical": len(crit),
-                     "high": len(high_open), "basis": basis})
+                     "high": len(high_open), "basis": basis,
+                     "basis_detail": basis_detail if basis == "Verified" else basis})
         for f in high_open:
             conditions.append(f"{'Open' if f['status'] == 'open' else 'Undecided'} High {f['id']} ({name}): {f['title']}")
         if ctx["risk"] != "standard":

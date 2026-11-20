@@ -72,7 +72,8 @@ def build(review_dir):
     for section, desc, sources in LAYOUT:
         copied, missing = [], []
         for pattern, sub in sources:
-            matches = sorted(p for p in review.glob(pattern) if p.is_file() and OUT not in p.parts)
+            matches = sorted(p for p in review.glob(pattern) if p.is_file() and OUT not in p.parts
+                             and "__pycache__" not in p.parts and p.suffix != ".pyc")
             if not matches and not in_scope(pattern):
                 summary["out_of_scope"].append(f"{section}/{pattern}")
                 continue
