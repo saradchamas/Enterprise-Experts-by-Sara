@@ -15,6 +15,7 @@
   export    --review REVIEW [--format F]     report.xlsx and report.pdf
   trend     --review NEW --previous OLD      what changed between two reviews
   gate      <project> [--baseline FILE]      model-free checks for CI and scheduled runs
+  research  add|propose|decide|check|log --review REVIEW   dated sources, and proposals that rest on them
   validate  --review REVIEW                  check findings.json + evidence (fail-closed)
   score     --review REVIEW                  scorecard + GO / CONDITIONAL GO / NO-GO
 """
@@ -23,7 +24,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, bench, capabilities, discovery, export, history, evidence, graphs, intake, package, report, scanners, scoring, state, visual
+from . import __version__, bench, capabilities, discovery, export, history, evidence, graphs, intake, package, report, research, scanners, scoring, state, visual
 from .areas import AREAS
 
 
@@ -182,6 +183,28 @@ def cmd_visual(a):
     return {"match": 0, "no_baseline": 10, "changed": 20}[res["verdict"]]
 
 
+def cmd_research(a):
+    if a.action == "add":
+        if a.area is None:
+            raise ValueError("research add needs --area")
+        _out(research.add_source(a.review, a.area, a.category, a.subject, a.claim, a.url, a.official, a.retrieved, a.published))
+        return 0
+    if a.action == "propose":
+        if a.area is None:
+            raise ValueError("research propose needs --area")
+        _out(research.propose(a.review, a.area, a.category, a.action_kind, a.title, a.sources or [], a.findings or [],
+                              a.goal, a.alternatives or [], a.effort, a.risk, a.rollback))
+        return 0
+    if a.action == "decide":
+        if not a.id or not a.status:
+            raise ValueError("research decide needs --id and --status")
+        _out(research.decide(a.review, a.id, a.status, a.by, a.reason, a.paths or [], a.evidence, a.max_age_days))
+        return 0
+    res = research.write_log(a.review, a.max_age_days) if a.action == "log" else research.check(a.review, a.max_age_days)
+    _out(res)
+    return 0 if res["valid"] else 2
+
+
 def cmd_export(a):
     formats = ("xlsx", "pdf") if a.format == "all" else (a.format,)
     _out(export.export(a.review, formats))
@@ -330,6 +353,35 @@ def build_parser():
     s.add_argument("--by")
     s.add_argument("--project")
     s.set_defaults(fn=cmd_visual)
+
+    s = sub.add_parser("research", help="dated sources and the proposals that rest on them")
+    s.add_argument("action", choices=["add", "propose", "decide", "check", "log"])
+    s.add_argument("--review", required=True)
+    s.add_argument("--area", type=int)
+    s.add_argument("--category", choices=research.CATEGORIES, default="technology")
+    s.add_argument("--subject")
+    s.add_argument("--claim", help="what the page said, in your own words")
+    s.add_argument("--url")
+    s.add_argument("--official", action="store_true", help="the vendor's or maintainer's own page")
+    s.add_argument("--retrieved", help="date the page was read (default: today)")
+    s.add_argument("--published")
+    s.add_argument("--action-kind", choices=research.ACTIONS, default="adopt")
+    s.add_argument("--title")
+    s.add_argument("--sources", nargs="*")
+    s.add_argument("--findings", nargs="*")
+    s.add_argument("--goal", help="a goal the user stated, when no finding applies")
+    s.add_argument("--alternatives", nargs="*")
+    s.add_argument("--effort", choices=research.EFFORTS, default="M")
+    s.add_argument("--risk")
+    s.add_argument("--rollback")
+    s.add_argument("--id")
+    s.add_argument("--status", choices=research.STATUSES[1:])
+    s.add_argument("--by")
+    s.add_argument("--reason")
+    s.add_argument("--paths", nargs="*", help="files the approved change may touch")
+    s.add_argument("--evidence", help="E-id of the check that passed after the change")
+    s.add_argument("--max-age-days", type=int, default=research.DEFAULT_MAX_AGE_DAYS)
+    s.set_defaults(fn=cmd_research)
 
     s = sub.add_parser("export", help="Excel workbook and PDF summary of a review")
     s.add_argument("--review", required=True)

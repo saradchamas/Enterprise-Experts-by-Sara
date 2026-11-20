@@ -8,7 +8,7 @@ import re
 import shutil
 from pathlib import Path
 
-from . import __version__, export, report, scoring  # noqa: F401
+from . import __version__, export, report, research, scoring  # noqa: F401
 from .areas import AREAS, required_areas
 
 OUT = "FINAL-ENGINEERING-DELIVERY"
@@ -39,9 +39,9 @@ LAYOUT = [
     ("10-evidence", "Evidence index, captured output and working files", [
         ("evidence-log.json", ""), ("findings.json", ""), ("evidence/*", "execution-logs"), ("intake.json", ""),
         ("discovery.json", ""), ("discovery.md", ""), ("capability-matrix.json", ""), ("review-state.json", ""),
-        ("research-log.md", ""), ("checks/**/*", "checks"), ("probes/**/*", "probes")]),
+        ("research-log.md", ""), ("research.json", ""), ("checks/**/*", "checks"), ("probes/**/*", "probes")]),
 ]
-OPTIONAL = {"scorecard-before-remediation.md", "report.xlsx", "report.pdf", "trend.md", "remediation-plan.md", "change-log.md", "research-log.md",
+OPTIONAL = {"scorecard-before-remediation.md", "report.xlsx", "report.pdf", "trend.md", "remediation-plan.md", "change-log.md", "research-log.md", "research.json",
             "capability-matrix.md", "capability-matrix.json", "00-scope-and-access.md"}
 NOT_IMPLEMENTED = ["PDF of the full report with diagrams (report.pdf is a plain-text summary)", "SBOM of the reviewed project"]
 
@@ -50,6 +50,7 @@ def build(review_dir):
     review = Path(review_dir)
     export.export(review)                     # report.xlsx, report.pdf; also refreshes the scorecards
     res = scoring.evaluate(review)
+    research_result = research.write_log(review) if (review / research.FILE_NAME).exists() else None
     out = review / OUT
     if out.exists():
         shutil.rmtree(out)
@@ -91,6 +92,13 @@ def build(review_dir):
         summary["missing"] += [f"{section}/{m}" for m in missing]
     if summary["out_of_scope"]:
         manifest += ["## Outside this review's scope", ""] + [f"- `{x}`" for x in summary["out_of_scope"]] + [""]
+    if research_result:
+        bad = research_result["problems"]
+        manifest += ["## Research and proposals", "",
+                     f"- {research_result['sources']} dated sources, {research_result['proposals']} proposals, "
+                     f"{len(research_result['supported'])} supported (see `research-log.md`)"]
+        manifest += [f"- must not be acted on yet: {k} — {'; '.join(v)}" for k, v in bad.items()] + [""]
+        summary["research"] = {"supported": research_result["supported"], "problems": bad}
     rows = {r["id"]: r for r in res["rows"]}
     manifest += ["## Areas", "", "| # | Area | Status | Final score |", "|---|---|---|---|"]
     manifest += [f"| {a} | {n} | {rows[a]['status'] if a in rows else 'not in this review'} | "

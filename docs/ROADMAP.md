@@ -1,6 +1,6 @@
 # Roadmap to v1.0
 
-Status as of v0.5.1. Enterprise Experts is one reusable skill with a local engine; it is not a hosted product, and no dashboard, server or database is planned. "Tested" means an automated test or a recorded run exists; anything else is stated as not done.
+Status as of v0.6.0. Enterprise Experts is one reusable skill with a local engine; it is not a hosted product, and no dashboard, server or database is planned. "Tested" means an automated test or a recorded run exists; anything else is stated as not done.
 
 ## What v0.5.0 covers
 
@@ -30,6 +30,7 @@ Status as of v0.5.1. Enterprise Experts is one reusable skill with a local engin
 | Continuous engineering | **Partly**: `trend` between reviews and a model-free `gate` with a CI template, both tested; this repository runs the gate on itself in CI | No scheduled expert review (it needs Claude and a person); the template has not been run in another project |
 | Supply chain | **Partly**: reproducible skill archive, SBOM and checksums built and verified in CI; release workflow with provenance attestation written; actions pinned by commit; Dependabot | The release workflow has never run (no tag yet). No registry of trusted skills. No vulnerability scan of the Docker image |
 | Releases, updates, rollback | **Upgrade and rollback tested** locally for 0.3.0 → 0.4.0 → 0.3.0 | No tagged release yet |
+| Research and proposals | **Done, tested** (0.6.0): dated sources, proposals that must solve something, cite sources and weigh an alternative, official-source and 90-day staleness rules, approval, verification by a later passing check, `research-log.md` in the delivery package | The engine does not browse; the quality of the research depends on the session's web access and on the model. Not yet evaluated in a model-driven run |
 | Skill evaluation | **Six runs recorded** in `docs/EVALUATION.md`: a with/without comparison, a full 23-expert review of this repository, a healthy project, a fix loop, AI and deployment, screenshots | One run each, by agents of the same model, with supplied answers; one real project (this one); no human judgment of report quality |
 
 ## v1.0 release checklist
@@ -53,7 +54,8 @@ Eight met (one of them locally only), three partly, one waiting for a tag.
 
 ## Known limitations
 
-- **Evaluation is thin.** Six runs, one each, by agents rather than people, on small samples and on this repository. No independent real project, no repeat runs, no human judgment of whether the reports are good.
+- **Evaluation is thin.** Six model-driven runs, one each, by agents rather than people, on small samples and on this repository. The engine alone has been run on five real open-source projects; the full expert review has not been run on an independent real project. No repeat runs, no human judgment of whether the reports are good.
+- **Research and proposals are new.** The engine rules are tested and the workflow was exercised once, by hand, on one real project with two official sources. No model-driven run of the research workflow has been evaluated, and no proposal has yet been approved, built and verified on a real project.
 - **On small projects the skill finds what the model finds anyway.** Its measured contribution so far is structure, an evidence trail and a rule-based decision, at 200,000 to 300,000 tokens per run.
 - **A clean small project did not reach GO.** Without a Critical or High finding the decision rests on the reviewer's own area scores against a fixed gate. The scorecard now says so; whether the gates are right for small or early projects is an open question for the owner.
 - **The engine validates form, not truth.** It proves a command ran and what it printed. It cannot tell whether that command was a meaningful test, whether a score is fair, or whether a cited source says what the report claims.
@@ -66,5 +68,5 @@ Eight met (one of them locally only), three partly, one waiting for a tag.
 1. Owner actions: run `python tools/live_guard_test.py` on a machine where Claude Code is logged in; push the first tag when ready.
 2. Run the skill on a real project of your own and have a person read the report. Fix what that shows.
 3. Decide whether the release gates should vary with project stage or size.
-4. Repeat the evaluation runs on v0.5.0, including one with parallel subagents.
+4. Repeat the evaluation runs on the current version, including one with parallel subagents and one with the research workflow switched on.
 5. Check the SARIF, osv-scanner, trivy and gitleaks importers against real tool output; samples for the six untested stacks.

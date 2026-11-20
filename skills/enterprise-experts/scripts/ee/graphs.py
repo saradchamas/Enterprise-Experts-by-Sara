@@ -4,20 +4,33 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-from .discovery import SKIP_DIRS
+from .discovery import AUX_DIRS, FIXTURE_DIRS, SKIP_DIRS
 
-PY_IMPORT = re.compile(r"(?m)^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+))")
+PY_IMPORT = re.compile(r"(?m)^\s*(?:from\s+(\.*[\w.]*)\s+import\s+(\(?[\w ,]*)|import\s+([\w.]+))")
+PY_ROOTS = ("", "src", "lib")   # where top-level Python packages usually live
 JS_IMPORT = re.compile(r"""(?:import\s+(?:[^'"]*?\s+from\s+)?|require\(\s*|import\(\s*)['"](\.{1,2}/[^'"]+)['"]""")
 JS_EXT = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte"}
 CREATE_TABLE = re.compile(r"(?is)create\s+table\s+(?:if\s+not\s+exists\s+)?[`\"\[]?([\w.]+)[`\"\]]?\s*\((.*?)\)\s*;")
 REFERENCES = re.compile(r"(?i)references\s+[`\"\[]?([\w.]+)[`\"\]]?")
+MAX_DRAWN_EDGES = 120
 PRISMA_MODEL = re.compile(r"(?s)\bmodel\s+(\w+)\s*\{(.*?)\}")
 
 
-def _files(root):
+def _files(root, also_skip=frozenset()):
+    skip = SKIP_DIRS | FIXTURE_DIRS | also_skip
     for path in Path(root).rglob("*"):
-        if path.is_file() and not (set(path.relative_to(root).parts[:-1]) & SKIP_DIRS):
+        if path.is_file() and not (set(path.relative_to(root).parts[:-1]) & skip):
             yield path
+
+
+def _py_target(base, names):
+    """The file or package a dotted name points at, walking back to the longest part that exists."""
+    cand = base.joinpath(*names)
+    while cand != base and not (cand.is_dir() or cand.with_suffix(".py").is_file()):
+        cand = cand.parent
+    if cand == base:
+        return None
+    return cand / "__init__.py" if cand.is_dir() else cand.with_suffix(".py")
 
 
 def _module(rel, depth):
@@ -29,7 +42,8 @@ def dependency_graph(root, depth=2):
     """Edges between directories (to `depth` levels), from import statements."""
     root = Path(root).resolve()
     files = [p for p in _files(root) if p.suffix in JS_EXT | {".py"}]
-    top = {p.relative_to(root).parts[0].removesuffix(".py") for p in files}
+    bases = [root / r for r in PY_ROOTS if (root / r).is_dir()]
+    tops = {b: {c.name.removesuffix(".py") for c in b.iterdir() if c.is_dir() or c.suffix == ".py"} for b in bases}
     edges, scanned = defaultdict(int), 0
     for path in files:
         try:
@@ -42,14 +56,29 @@ def dependency_graph(root, depth=2):
         targets = set()
         if path.suffix == ".py":
             for m in PY_IMPORT.finditer(text):
-                name = (m.group(1) or m.group(2)).split(".")
-                if name[0] in top:
-                    cand = root.joinpath(*name)
-                    while cand != root and not (cand.is_dir() or cand.with_suffix(".py").is_file()):
-                        cand = cand.parent
-                    if cand != root:
-                        target_file = cand / "__init__.py" if cand.is_dir() else cand.with_suffix(".py")
-                        targets.add(_module(target_file.relative_to(root), depth))
+                dotted = m.group(1) if m.group(1) is not None else m.group(3)
+                target_file = None
+                if dotted.startswith("."):                       # relative: from . import x / from ..pkg import y
+                    level = len(dotted) - len(dotted.lstrip("."))
+                    base = path.parent
+                    for _ in range(level - 1):
+                        base = base.parent
+                    if root != base and root not in base.parents:
+                        continue
+                    rest = [x for x in dotted.lstrip(".").split(".") if x]
+                    firsts = [x.strip() for x in (m.group(2) or "").strip("( ").split(",") if x.strip()]
+                    for names in ([rest + [f.split()[0]] for f in firsts] if not rest else [rest]):
+                        target_file = _py_target(base, names)
+                        if target_file is not None and root in target_file.parents:
+                            targets.add(_module(target_file.relative_to(root), depth))
+                    continue
+                name = dotted.split(".")
+                for base in bases:
+                    if name[0] in tops[base]:
+                        target_file = _py_target(base, name)
+                        if target_file is not None:
+                            targets.add(_module(target_file.relative_to(root), depth))
+                            break
         else:
             for m in JS_IMPORT.finditer(text):
                 target = (path.parent / m.group(1)).resolve()
@@ -60,35 +89,84 @@ def dependency_graph(root, depth=2):
                     targets.add(_module(as_file.relative_to(root), depth))
         for dst in targets - {src}:
             edges[(src, dst)] += 1
+    cycles, sizes = _cycles(edges)
     return {"files_scanned": scanned, "edges": [{"from": a, "to": b, "imports": n} for (a, b), n in sorted(edges.items())],
-            "cycles": _cycles(edges)}
+            "cycles": cycles, "cycle_group_sizes": sizes}
 
 
 def _cycles(edges):
+    """One example cycle per group of modules that depend on each other in a circle.
+
+    Groups are strongly connected components (Tarjan, iterative), so the cost grows with the
+    number of edges. Listing every distinct cycle grows exponentially and never finished on a
+    large project; one shortest example per group is what a reader can act on."""
     graph = defaultdict(set)
     for a, b in edges:
         graph[a].add(b)
-    found, seen = [], set()
-
-    def visit(node, stack):
-        for nxt in sorted(graph[node]):
-            if nxt in stack:
-                cycle = stack[stack.index(nxt):] + [nxt]
-                key = frozenset(cycle)
-                if key not in seen:
-                    seen.add(key)
-                    found.append(cycle)
-            elif len(stack) < 30:
-                visit(nxt, stack + [nxt])
-    for start in sorted(graph):
-        visit(start, [start])
-    return found
+        graph.setdefault(b, set())
+    index, low, on_stack, stack, groups, counter = {}, {}, set(), [], [], 0
+    for root in sorted(graph):
+        if root in index:
+            continue
+        work = [(root, iter(sorted(graph[root])))]
+        index[root] = low[root] = counter
+        counter += 1
+        stack.append(root)
+        on_stack.add(root)
+        while work:
+            node, children = work[-1]
+            pushed = False
+            for nxt in children:
+                if nxt not in index:
+                    index[nxt] = low[nxt] = counter
+                    counter += 1
+                    stack.append(nxt)
+                    on_stack.add(nxt)
+                    work.append((nxt, iter(sorted(graph[nxt]))))
+                    pushed = True
+                    break
+                if nxt in on_stack:
+                    low[node] = min(low[node], index[nxt])
+            if pushed:
+                continue
+            work.pop()
+            if work:
+                low[work[-1][0]] = min(low[work[-1][0]], low[node])
+            if low[node] == index[node]:
+                group = []
+                while True:
+                    top = stack.pop()
+                    on_stack.discard(top)
+                    group.append(top)
+                    if top == node:
+                        break
+                if len(group) > 1:
+                    groups.append(sorted(group))
+    found = []
+    for group in sorted(groups):
+        members, start = set(group), group[0]
+        parent, queue, end = {start: None}, [start], None
+        while queue and end is None:          # shortest way from `start` back to itself, inside the group
+            node = queue.pop(0)
+            for nxt in sorted(graph[node] & members):
+                if nxt == start:
+                    end = node
+                    break
+                if nxt not in parent:
+                    parent[nxt] = node
+                    queue.append(nxt)
+        path = []
+        while end is not None:
+            path.append(end)
+            end = parent[end]
+        found.append(path[::-1] + [start])
+    return found, [len(g) for g in sorted(groups)]
 
 
 def database_model(root):
     """Tables and foreign keys from SQL files and Prisma schemas."""
     tables, relations, sources = {}, set(), []
-    for path in _files(root):
+    for path in _files(root, AUX_DIRS):       # schemas in examples, docs and tests are not the product's
         if path.suffix.lower() == ".sql":
             text = path.read_text(encoding="utf-8", errors="ignore")
             hit = False
@@ -135,13 +213,30 @@ def write(root, out_dir, depth=2):
     written = []
     dep = dependency_graph(root, depth)
     if dep["edges"]:
+        # A diagram with hundreds of arrows cannot be read and most viewers refuse to draw it.
+        drawn, note = dep, ""
+        if len(dep["edges"]) > MAX_DRAWN_EDGES and depth > 1:
+            drawn = dependency_graph(root, 1)
+            note = (f" The project has {len(dep['edges'])} dependencies between modules at depth {depth}; the diagram "
+                    f"is drawn at depth 1 and the full list is in `dependency-edges.csv`.")
+        shown = sorted(drawn["edges"], key=lambda e: -e["imports"])[:MAX_DRAWN_EDGES]
+        if len(shown) < len(drawn["edges"]):
+            note += (f" Only the {MAX_DRAWN_EDGES} most-used of {len(drawn['edges'])} dependencies are drawn.")
+        if note:
+            rows = ["from,to,imports"] + [f'"{e["from"]}","{e["to"]}",{e["imports"]}' for e in dep["edges"]]
+            (out / "dependency-edges.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+            written.append("dependency-edges.csv")
         lines = ["# Module dependency graph", "",
                  f"**Evidence level: Observed** — derived from import statements in {dep['files_scanned']} "
-                 "Python/JavaScript/TypeScript files. Dynamic imports and other languages are not included.", "",
+                 "Python/JavaScript/TypeScript files. Dynamic imports and other languages are not included." + note, "",
                  "```mermaid", "graph LR"]
-        lines += [f'  {_id(e["from"])}["{e["from"]}"] -->|{e["imports"]}| {_id(e["to"])}["{e["to"]}"]' for e in dep["edges"]]
+        lines += [f'  {_id(e["from"])}["{e["from"]}"] -->|{e["imports"]}| {_id(e["to"])}["{e["to"]}"]'
+                  for e in sorted(shown, key=lambda e: (e["from"], e["to"]))]
         lines += ["```", ""]
-        lines += (["## Circular dependencies", ""] + [f"- {' → '.join(c)}" for c in dep["cycles"]] + [""]
+        lines += (["## Circular dependencies", "",
+                   "One shortest example per group of modules that depend on each other in a circle; "
+                   "the number is how many modules are in that group.", ""]
+                  + [f"- ({n} modules) {' → '.join(c)}" for c, n in zip(dep["cycles"], dep["cycle_group_sizes"], strict=True)] + [""]
                   if dep["cycles"] else ["No circular dependencies between these modules.", ""])
         (out / "dependency-graph.md").write_text("\n".join(lines), encoding="utf-8")
         written.append("dependency-graph.md")

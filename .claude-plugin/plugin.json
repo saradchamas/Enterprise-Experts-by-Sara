@@ -1,6 +1,6 @@
 {
   "name": "enterprise-experts",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Enterprise Experts by Sara: a 23-expert, evidence-based production-readiness review for any software project, with a deterministic Go/No-Go decision.",
   "author": {
     "name": "Sara Chamas",

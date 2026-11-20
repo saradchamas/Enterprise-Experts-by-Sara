@@ -78,6 +78,8 @@ The decision at the end is made by the engine from the recorded evidence, not by
 
 Three modes: **Full** (all 23 areas), **Quick** (8 areas), **Focused** (the areas you name; its decision covers that scope only).
 
+**Beyond reviewing: research and build.** If you say yes at intake, the team also looks for newer technologies, AI models, tools and MCP servers that would help this project. Every proposal must name the problem it solves, cite pages that were read during the review (URL and date), and weigh an alternative; the engine refuses one that does not, and flags sources older than 90 days. You approve or reject each proposal. An approved one is built on a branch and counts as verified only after a check passed afterwards. The research itself is done by Claude with whatever web access your session has; the engine keeps it honest, it does not browse.
+
 ## Architecture
 
 One skill, four parts: instructions Claude reads, two helper agents, a guard that runs before every edit or command, and a small Python engine that records evidence and makes the decision. Nothing is hosted; everything runs on your machine and writes to one review folder.
@@ -135,7 +137,7 @@ How the engine's modules depend on each other. An arrow means "imports". `cli` i
 ```mermaid
 graph LR
     subgraph Outputs
-        package; export; report; history
+        package; export; report; history; research
     end
     subgraph Decision
         scoring; intake; state
@@ -173,8 +175,12 @@ graph LR
     package --> areas
     package --> export
     package --> report
+    package --> research
     package --> scoring
     report --> areas
+    research --> areas
+    research --> evidence
+    research --> state
     scanners --> evidence
     scanners --> secrets
     scoring --> areas
@@ -199,11 +205,11 @@ graph LR
 
 Each review also produces the expert reports, an evidence log with the captured output of every check, `report.xlsx`, `report.pdf` and a delivery folder. More about what the runs so far did and did not show is in [docs/EVALUATION.md](docs/EVALUATION.md).
 
-## Status: v0.5.1, not yet v1.0
+## Status: v0.6.0, not yet v1.0
 
 What is implemented and tested, and what is not, is tracked honestly in [docs/ROADMAP.md](docs/ROADMAP.md). Enterprise Experts is one reusable skill, not a hosted product: there is no server, dashboard or database to run. You install it once and invoke it in any project; it works out what that project is and applies only what fits.
 
-In short: the decision engine, intake, capability matrix, evidence recording, stack detection, scanner-result import, edit/command guard, before/after benchmarks, diagrams from code, screenshot comparison, delivery packaging, Docker runner and CI are implemented and covered by 157 automated tests. The skill has been run six times, including a full 23-expert review of this repository, and what those runs found (including serious defects in the skill itself, since fixed) is recorded in [docs/EVALUATION.md](docs/EVALUATION.md). It has not yet been run on a real project other than this one, nobody has judged the quality of its reports, and no release has been tagged.
+In short: the decision engine, intake, capability matrix, evidence recording, stack detection, scanner-result import, edit/command guard, before/after benchmarks, diagrams from code, screenshot comparison, delivery packaging, research and proposals, Docker runner and CI are implemented and covered by 186 automated tests. The skill has been run six times, including a full 23-expert review of this repository, and what those runs found (including serious defects in the skill itself, since fixed) is recorded in [docs/EVALUATION.md](docs/EVALUATION.md). The engine has also been run on five real open-source projects (Flask, Express, Gin, the FastAPI full-stack template and Django, 130 to 7,104 files), which exposed eight defects, all fixed and covered by tests. The full 23-expert review has still not been run on a real project other than this one, nobody has judged the quality of its reports, and no release has been tagged.
 
 ## Install
 

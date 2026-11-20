@@ -31,6 +31,7 @@ Talk to the user in the language they use (Sara often writes Lebanese Arabic mix
 | `references/deployment-advisor.md` | When hosting is unsettled, a problem, or the user asks: comparing deployment options for this project. |
 | `references/visual-documentation.md` | Drawing diagrams, capturing real screenshots, visual regression. |
 | `references/project-types.md` | The project is not a hosted web application (a tool, library, CLI or skill; a mobile app; infrastructure only; a data pipeline; an unbuilt prototype), or you need to write your own check script. |
+| `references/research-and-innovation.md` | The user wants the team to look for newer technologies, AI models, tools or MCP servers and propose them: what to look for, dated sources, proposals, approval, building and verifying. |
 | `references/companion-skills.md` | Deciding whether a skill, plugin, MCP server or tool would help an expert, and how to vet one before recommending it. |
 | `assets/final-report-template.md` | Writing the Final Project Health Report |
 | `assets/deliverable-template.md` | Writing each expert's deliverable file |
@@ -57,6 +58,7 @@ Talk to the user in the language they use (Sara often writes Lebanese Arabic mix
 | `EE export --review <review>` | `report.xlsx` (summary, scorecard, findings, checks, evidence) and `report.pdf` (plain-text summary; Latin characters only). |
 | `EE trend --review <review> --previous <earlier review>` | What changed since an earlier review of the same project: scores, new, resolved and still-open findings, regressions. |
 | `EE gate <project> [--baseline discovery.json]` | Model-free checks for CI and schedules: committed secrets, text aimed at AI reviewers, lost tests/CI/lockfiles. Template: `assets/ci/enterprise-experts-gate.yml`. |
+| `EE research add\|propose\|decide\|check\|log --review <review>` | Dated sources (a page that was read, with URL and date) and the proposals that rest on them. Refuses a proposal with no source, no problem it solves or no alternative; `verified` needs a check that passed after approval. |
 | `EE package --review <review>` | Assembles `FINAL-ENGINEERING-DELIVERY/` from what the review produced (including the exports), with a manifest of what is missing. |
 | `EE validate --review <review>` / `EE score --review <review>` | Checks the whole review and decides GO / CONDITIONAL GO / NO-GO. Writes `scorecard.md`, `.json`, `.html`. |
 
@@ -155,6 +157,8 @@ Early in wave 1, run `EE graph` and use its diagrams in the Architecture and Dat
 For each expert: `EE state set --area N --status in_progress`; read its section in the matching reference file; work through its checks; record evidence with `EE evidence`; write its deliverable from `assets/deliverable-template.md`; add its area (checks, findings, score) to `findings.json`; then `--status done`. Each deliverable must contain the expert's real artifact (the diagram, the threat model, the SLO table, the test results), built from what you inspected. Never draw infrastructure that isn't there or report numbers that weren't measured.
 
 **Research before recommending.** For each framework, library or design question behind a High or Critical finding, look up the current official documentation for the version the project actually uses, compare reasonable alternatives, and record the source URL and the date you checked (see `references/improvement-loop.md`). In a quick review, sourced research is required for Critical findings only; for the rest, say that sources were not checked. If you have no way to browse in this session, say so in the deliverable and mark the recommendation as based on general knowledge that may be out of date; do not present remembered version numbers, prices or model names as current.
+
+**Research and innovation.** When the intake answer to `innovation_scan` is a yes, or the user asks what newer technology, AI models or integrations (MCP servers, tools) would help, read `references/research-and-innovation.md` and run it during the Synthesis wave: look things up on primary sources within the privacy answer, record each page with `EE research add`, turn what holds up into proposals with `EE research propose`, and run `EE research check` and `EE research log`. Proposals are presented with the remediation plan; the user approves or rejects each (`EE research decide`), and an approved one is built and verified through Phase 3 like any fix. Never state a model, version, price or tool as current from memory.
 
 Activate the cross-cutting workflows the capability matrix calls for, and only those: AI engineering (`references/ai-engineering.md`), deployment advisor (`references/deployment-advisor.md`), real screenshots and visual regression (`references/visual-documentation.md`).
 
