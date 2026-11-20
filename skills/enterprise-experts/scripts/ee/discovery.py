@@ -24,7 +24,7 @@ LANG = {".ts": "TypeScript", ".tsx": "TypeScript", ".js": "JavaScript", ".jsx": 
         ".hs": "Haskell", ".clj": "Clojure", ".erl": "Erlang", ".zig": "Zig"}
 MANIFESTS = {"package.json", "requirements.txt", "pyproject.toml", "Pipfile", "go.mod", "pom.xml", "build.gradle",
              "build.gradle.kts", "Gemfile", "composer.json", "Cargo.toml", "pubspec.yaml", "Package.swift"}
-LOCKFILES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "poetry.lock", "Pipfile.lock",
+LOCKFILES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "bun.lock", "poetry.lock", "Pipfile.lock",
              "uv.lock", "go.sum", "Gemfile.lock", "composer.lock", "Cargo.lock", "pubspec.lock"}
 CI_FILES = {".gitlab-ci.yml", "Jenkinsfile", "azure-pipelines.yml", "bitbucket-pipelines.yml", ".travis.yml",
             "cloudbuild.yaml", "buildspec.yml", "vercel.json", "netlify.toml", "firebase.json", "fly.toml",
@@ -71,6 +71,10 @@ INJECTION = re.compile(
     r"|do\s+not\s+(report|mention|flag|disclose)\s+(any\s+)?(vulnerabilit|finding|issue|secret)"
     r"|(ai|llm|assistant|claude|agent)s?\s*[:,]?\s+(you\s+)?(must|should)\s+(skip|approve|ignore)")
 FIXTURE_DIRS = {"fixtures", "__fixtures__", "testdata", "test-data", "test_data"}
+# Folders that accompany a product without being part of it. Their files are still counted and scanned
+# for secrets, but a manifest, schema or migration found there says nothing about what the product is.
+AUX_DIRS = {"examples", "example", "samples", "sample", "demo", "demos", "docs", "doc", "tests", "test", "testing",
+            "__tests__", "e2e", "benchmarks", "benchmark"}
 IMPORT_LINE = re.compile(r"^\s*(?:import|from|const|let|var|require|use|using|export)\b|\brequire\(|\bimport\(")
 TEXT_EXT = set(LANG) | {".json", ".yml", ".yaml", ".toml", ".env", ".ini", ".cfg", ".conf", ".properties", ".tf",
                          ".md", ".txt", ".xml", ".gradle", ".pem", ".key", ""}
@@ -104,7 +108,8 @@ def discover(root, exclude=()):
          "gitignore_covers_env": None, "notes": [], "commit": git_commit(root),
          "ai_libraries": set(), "workspace_markers": [],
          "agent_instruction_files": [], "prompt_injection_suspects": [], "excluded": [], "dockerfile_dirs": set(), "tf_dirs": set(),
-         "dotnet_dirs": set(), "data_markers": []}
+         "dotnet_dirs": set(), "data_markers": [], "auxiliary_manifests": []}
+    ui_files, go_tests = 0, False
     dep_blob = []
     import_lines = []
     sizes = []
@@ -119,7 +124,8 @@ def discover(root, exclude=()):
         dirnames[:] = [x for x in dirnames if x not in SKIP_DIRS and x not in FIXTURE_DIRS
                        and (rel_dir / x).as_posix() not in exclude]
         low = dp.name.lower()
-        if low in ("migrations", "migrate", "alembic"):
+        aux = bool({x.lower() for x in rel_dir.parts} & AUX_DIRS)
+        if low in ("migrations", "migrate", "alembic") and not aux:
             d["database"]["migrations_dirs"].append(rel_dir.as_posix())
         if rel_dir.as_posix().replace("\\", "/") == ".github/workflows":
             d["ci"] += [(rel_dir / f).as_posix() for f in filenames if f.endswith((".yml", ".yaml"))]
@@ -130,7 +136,9 @@ def discover(root, exclude=()):
             rel = p.relative_to(root)
             ext = p.suffix.lower()
             fl = f.lower()
-            if f in MANIFESTS or ext == ".csproj":
+            if (f in MANIFESTS or ext == ".csproj") and aux:
+                d["auxiliary_manifests"].append(rel.as_posix())
+            elif f in MANIFESTS or ext == ".csproj":
                 d["manifests"].append(rel.as_posix())
                 dep_blob.append(read_text(p).lower())
                 if f == "package.json" and len(rel.parts) == 1:
@@ -156,9 +164,9 @@ def discover(root, exclude=()):
                 d["containers"].append(rel.as_posix())
             if ext == ".tf" or f in IAC_NAMES:
                 d["iac"].append(rel.as_posix())
-            if fl in ("schema.prisma", "schema.sql", "schema.rb", "structure.sql") or fl.endswith(".dbml"):
+            if (fl in ("schema.prisma", "schema.sql", "schema.rb", "structure.sql") or fl.endswith(".dbml")) and not aux:
                 d["database"]["schema_files"].append(rel.as_posix())
-            if ext == ".sql":
+            if ext == ".sql" and not aux:
                 d["database"]["sql_files"] += 1
             if fl.startswith(".env"):
                 d["env_files"].append(rel.as_posix())
@@ -178,7 +186,10 @@ def discover(root, exclude=()):
                                  if IMPORT_LINE.match(ln) and len(ln) < 300]
             if ext in LANG:
                 d["languages"][LANG[ext]] += 1
+                if ext in (".html", ".vue", ".svelte") and not aux and not is_test_file(rel):
+                    ui_files += 1
                 if is_test_file(rel):
+                    go_tests = go_tests or fl.endswith("_test.go")
                     d["test_files"] += 1
                 else:
                     d["source_files"] += 1
@@ -218,7 +229,8 @@ def discover(root, exclude=()):
                           (DB_HINTS, d["database"]["tools"]), (OBS_HINTS, d["observability"]),
                           (PAID_HINTS, d["paid_services"]), (AI_HINTS, d["ai_libraries"])):
         for key, label in hints.items():
-            if re.search(r"(?<![a-z0-9_\-])" + re.escape(key), blob):
+            # Whole names only: "expo" must not match the "exports" field, nor "vite" match "vitest".
+            if re.search(r"(?<![a-z0-9_\-])" + re.escape(key) + r"(?![a-z])", blob):
                 target.add(label)
     # A dependency in a manifest is a declaration, not a use. Check the code actually imports it.
     imports = "\n".join(import_lines).lower()
@@ -232,6 +244,13 @@ def discover(root, exclude=()):
          for label in found if not used(hints, {label})})
     if any("node --test" in str(v) for v in d["scripts"].values()) or re.search(r"""['"]node:test['"]""", blob):
         d["test_frameworks"].add("node:test")
+    # `from unittest.mock import ...` is a helper used under any runner; it does not make unittest the framework.
+    if re.search(r"(?m)^\s*(?:import\s+unittest\s*$|from\s+unittest\s+import\s+(?!mock))", imports):
+        d["test_frameworks"].add("unittest")
+    if re.search(r"(?m)^\s*from\s+django\.test\b", imports):
+        d["test_frameworks"].add("Django test runner")
+    if go_tests:
+        d["test_frameworks"].add("go test")
     gi = root / ".gitignore"
     if gi.exists():
         d["gitignore_covers_env"] = bool(re.search(r"(?m)^\s*\.env", read_text(gi)))
@@ -277,7 +296,7 @@ def discover(root, exclude=()):
         "is_monorepo": bool(d["workspace_markers"]) or any(s.get("workspaces") for s in d["stacks"])
         or len({s["path"] for s in code_stacks}) >= 3,
         "is_microservices": len(d["dockerfile_dirs"]) >= 3,
-        "has_ui": bool(fw & UI_FRAMEWORKS) or any(k in d["languages"] for k in ("HTML", "Vue", "Svelte")),
+        "has_ui": bool(fw & UI_FRAMEWORKS) or ui_files > 0,
         "has_api": bool((fw & API_FRAMEWORKS) - unused) or bool(d["api_specs"]),
         "has_mobile": bool(fw & MOBILE_FRAMEWORKS),
         "has_database": bool(set(d["database"]["tools"]) - unused or d["database"]["migrations_dirs"]
@@ -291,6 +310,10 @@ def discover(root, exclude=()):
         "infrastructure_only": bool(d["iac"]) and not code_stacks and d["source_files"] <= d["languages"].get("Shell", 0),
         "unsupported_stack": not d["stacks"] and d["source_files"] > 0,
     }
+    if d["auxiliary_manifests"]:
+        shown = ", ".join(d["auxiliary_manifests"][:8]) + (" …" if len(d["auxiliary_manifests"]) > 8 else "")
+        d["notes"].append(f"{len(d['auxiliary_manifests'])} manifest(s) under examples, docs or tests folders are not treated "
+                          f"as parts of the product: {shown}. Review such a folder on its own if it is one.")
     d["analysis_tools"] = analysis_tools()
     if d["excluded"]:
         d["notes"].append("Not scanned (test data or excluded by request): " + ", ".join(d["excluded"])
