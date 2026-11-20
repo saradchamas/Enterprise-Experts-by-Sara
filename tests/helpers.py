@@ -54,7 +54,7 @@ def write(path, findings=None, intake=None):
 
 
 def read(path, name="findings.json"):
-    return json.loads((Path(path) / name).read_text())
+    return json.loads((Path(path) / name).read_text(encoding="utf-8"))
 
 
 class ReviewCase:

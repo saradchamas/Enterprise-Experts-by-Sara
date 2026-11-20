@@ -26,7 +26,7 @@ class EvidenceCapture(Tmp):
         for key in ("id", "command", "exit_code", "started_at", "duration_s", "artifact", "sha256", "runner"):
             self.assertIn(key, rec)
         self.assertEqual((rec["id"], rec["exit_code"]), ("E-001", 0))
-        self.assertIn("check passed", (self.tmp / rec["artifact"]).read_text())
+        self.assertIn("check passed", (self.tmp / rec["artifact"]).read_text(encoding="utf-8"))
         self.assertEqual(evidence.record_level(rec, self.tmp), ("verified", None))
         self.assertEqual(evidence.run_command(self.tmp, 9, "again", OK_CMD)["id"], "E-002")
 
@@ -44,7 +44,7 @@ class EvidenceCapture(Tmp):
         aws = "AKIA" + "ABCDEFGHIJKLMNOP"
         code = f"print('key={key}'); print('aws {aws}'); print('DB_PASSWORD=hunter2hunter2')"
         rec = evidence.run_command(self.tmp, 2, "leaky", [sys.executable, "-c", code])
-        text = (self.tmp / rec["artifact"]).read_text() + json.dumps(rec)
+        text = (self.tmp / rec["artifact"]).read_text(encoding="utf-8") + json.dumps(rec)
         for secret in (key, aws, "hunter2hunter2"):
             self.assertNotIn(secret, text)
 

@@ -1,5 +1,6 @@
 """End-to-end: drives the real CLI as a subprocess through a whole review."""
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -17,7 +18,8 @@ CLI = [sys.executable, str(SCRIPTS / "enterprise_experts.py")]
 
 
 def cli(*args, cwd=None):
-    return subprocess.run(CLI + [str(a) for a in args], capture_output=True, text=True, cwd=cwd)
+    return subprocess.run(CLI + [str(a) for a in args], capture_output=True, text=True, cwd=cwd,
+                          encoding="utf-8", errors="replace")
 
 
 class EndToEnd(unittest.TestCase):
@@ -70,8 +72,8 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("SEC-001", out.stdout)
         for name in ("scorecard.md", "scorecard.json", "scorecard.html", "discovery.md", "evidence-log.json"):
             self.assertTrue((self.review / name).exists(), name)
-        self.assertIn("NO-GO", (self.review / "scorecard.html").read_text())
-        everything = "".join(p.read_text() for p in self.review.rglob("*") if p.is_file())
+        self.assertIn("NO-GO", (self.review / "scorecard.html").read_text(encoding="utf-8"))
+        everything = "".join(p.read_text(encoding="utf-8") for p in self.review.rglob("*") if p.is_file())
         self.assertNotIn("FixturePassw0rd", everything)
 
     def test_healthy_project_can_reach_go(self):
@@ -88,11 +90,11 @@ class EndToEnd(unittest.TestCase):
         self.review.mkdir(parents=True)
         rec = self.evidence(9, "unit tests", "node", "--test", project=FIXTURES / "healthy-node")
         self.assertEqual(rec["exit_code"], 0)
-        self.assertIn("pass 1", (self.review / rec["artifact"]).read_text())
+        self.assertIn("pass 1", (self.review / rec["artifact"]).read_text(encoding="utf-8"))
 
     def test_incomplete_review_is_invalid_not_go(self):
         self.quick_review("healthy-node", sec_finding=False)
-        data = json.loads((self.review / "findings.json").read_text())
+        data = json.loads((self.review / "findings.json").read_text(encoding="utf-8"))
         data["areas"] = data["areas"][:1]
         (self.review / "findings.json").write_text(json.dumps(data))
         self.assertEqual(cli("validate", "--review", self.review).returncode, 2)
@@ -116,6 +118,14 @@ class EndToEnd(unittest.TestCase):
                   "--", "git", "push", "origin", "main")
         self.assertEqual(out.returncode, 3)
         self.assertIn("approval", out.stderr)
+
+    def test_scorecard_prints_on_a_legacy_console(self):
+        """Windows consoles default to a code page that cannot encode the star in the scorecard."""
+        self.quick_review("healthy-node", sec_finding=False)
+        env = dict(os.environ, PYTHONIOENCODING="cp1252", PYTHONUTF8="0")
+        out = subprocess.run(CLI + ["score", "--review", str(self.review)], capture_output=True, env=env)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("Decision: GO", out.stdout.decode("utf-8"))
 
     def test_misc_commands(self):
         self.assertEqual(cli("--version").stdout.strip(), __version__)
@@ -163,15 +173,15 @@ class SkillPackage(unittest.TestCase):
             self.assertRegex(skill, rf"(?m)^\| {aid} \| .+`{aid:02d}-[\w-]+\.md`")
 
     def test_versions_agree(self):
-        plugin = json.loads((REPO / ".claude-plugin" / "plugin.json").read_text())
+        plugin = json.loads((REPO / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(plugin["version"], __version__)
         self.assertIn(f"## [{__version__}]", (REPO / "CHANGELOG.md").read_text(encoding="utf-8"))
-        self.assertIn(f"image: enterprise-experts:{__version__}", (REPO / "compose.yaml").read_text())
+        self.assertIn(f"image: enterprise-experts:{__version__}", (REPO / "compose.yaml").read_text(encoding="utf-8"))
 
     def test_engine_uses_only_the_standard_library(self):
         allowed = set(sys.stdlib_module_names) | {"ee"}
         for path in (self.SKILL / "scripts").rglob("*.py"):
-            for m in re.finditer(r"(?m)^(?:from|import) ([a-zA-Z_]\w*)", path.read_text()):
+            for m in re.finditer(r"(?m)^(?:from|import) ([a-zA-Z_]\w*)", path.read_text(encoding="utf-8")):
                 self.assertIn(m.group(1), allowed, f"{path.name} imports {m.group(1)}")
 
 

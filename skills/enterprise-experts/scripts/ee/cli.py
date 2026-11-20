@@ -160,6 +160,11 @@ def build_parser():
 
 
 def main(argv=None):
+    # Reports contain characters (★, —, …, Arabic) that legacy Windows consoles cannot
+    # encode; without this the CLI would crash while printing a valid scorecard.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     argv = list(sys.argv[1:] if argv is None else argv)
     command = []
     if "--" in argv:  # everything after "--" is the command for `evidence run`
