@@ -74,6 +74,14 @@ The synthesis experts (17, 21, 22, 23) run last and **reuse** the other experts'
 - Technology risk register (vendor lock-in, end-of-life versions, key-person dependency, licensing).
 - Challenge assumptions (grill-me stance): list the 3–5 assumptions the roadmap depends on and ask the user to confirm them.
 
+**Checks:**
+- End-of-life or unsupported runtime/framework versions (compare versions in manifests with vendor support dates; search the web for current dates and cite them).
+- Dependency freshness: run the stack's outdated command where one exists (`npm outdated`, `pip list --outdated`, `go list -u -m all`) through `EE evidence run`.
+- Vendor lock-in: which providers the code is tied to (from discovery's paid services, IaC and SDK imports) and what leaving would cost.
+- Licences of key dependencies that conflict with how the product is sold.
+- Every roadmap item traces to a finding ID or an intake answer; an item with neither is an opinion and is labelled as one.
+- Does the roadmap fit the team and deadline given in the intake?
+
 ---
 
 ## 22. Technical Leadership — Distinguished Engineer / Chief Architect
@@ -88,6 +96,14 @@ The synthesis experts (17, 21, 22, 23) run last and **reuse** the other experts'
 - Engineering standards proposal (coding conventions, review checklist, definition of done).
 - Review of any Phase 3 changes made by other experts — a second pair of eyes before the final report.
 
+**Checks:**
+- Churn hotspots from git history (command above), then read the top files.
+- Lint and type-check results using the stack's commands from discovery, through `EE evidence run`.
+- Error handling in the critical journeys named in the intake: swallowed exceptions, missing timeouts, inconsistent error shapes.
+- Duplication and dead code in the largest files listed by discovery.
+- Consistency across modules: naming, folder structure, how config and logging are done.
+- Every other expert's recommendations read side by side for contradictions.
+
 ---
 
 ## 23. Engineering Delivery — VP of Engineering
@@ -101,3 +117,11 @@ The synthesis experts (17, 21, 22, 23) run last and **reuse** the other experts'
 - Team/process recommendations: roles needed, review process, CI gates, definition of done.
 - If the user wants tickets and an issue-tracker connector (Jira/Linear/GitHub) is available: create them after approval, link finding IDs. Don't change a ticket's status until the whole piece of work is finished.
 - Delivery metrics to track going forward (deployment frequency, lead time, change-failure rate, MTTR).
+
+**Checks:**
+- Every open finding in `findings.json` appears exactly once in the backlog, with an owner role and acceptance criteria.
+- No backlog item depends on an item scheduled after it.
+- Commit and release cadence from git history (`git log --date=short --format=%ad | sort | uniq -c`) as a baseline for delivery metrics.
+- Whether work is reviewed before merge (branch protection or PR history, if the repository host is accessible).
+- The launch-blocker milestone contains every Critical and every High the scorecard lists as a blocker or condition.
+- The plan is achievable with the team and deadline from the intake; say so plainly if it is not.

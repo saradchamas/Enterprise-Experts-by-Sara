@@ -1,20 +1,15 @@
-#!/usr/bin/env python3
-"""Inventory a software project for the Enterprise Experts review.
-
-Usage: python discover_project.py <project_dir> [--out <review_dir>]
-
-Read-only. Detects stack, manifests, tests, CI/CD, containers, IaC, database
-artifacts, observability, docs, largest source files, and likely committed
-secrets (values are masked). Writes discovery.json and discovery.md.
-Standard library only.
-"""
-import argparse
+"""Read-only project inventory: stack, adapters, tests, CI/CD, containers, IaC,
+database artifacts, observability, docs, largest files and likely committed
+secrets (values masked). Standard library only."""
 import json
 import os
 import re
-import sys
 from collections import Counter
 from pathlib import Path
+
+from .adapters import WORKSPACE_MARKERS, detect_stacks, unsupported_languages
+from .evidence import git_commit
+from .secrets import ENV_SECRET, PLACEHOLDER, SECRET_PATTERNS, mask
 
 SKIP_DIRS = {".git", "node_modules", "vendor", "venv", ".venv", "env", "__pycache__", "dist", "build",
              ".next", ".nuxt", "out", "target", "bin", "obj", ".idea", ".vscode", "coverage", ".turbo",
@@ -23,7 +18,9 @@ LANG = {".ts": "TypeScript", ".tsx": "TypeScript", ".js": "JavaScript", ".jsx": 
         ".py": "Python", ".go": "Go", ".java": "Java", ".kt": "Kotlin", ".rb": "Ruby", ".php": "PHP",
         ".cs": "C#", ".rs": "Rust", ".swift": "Swift", ".dart": "Dart", ".vue": "Vue", ".svelte": "Svelte",
         ".sql": "SQL", ".scala": "Scala", ".c": "C", ".cpp": "C++", ".h": "C/C++ header", ".sh": "Shell",
-        ".html": "HTML", ".css": "CSS", ".scss": "SCSS"}
+        ".html": "HTML", ".css": "CSS", ".scss": "SCSS", ".ex": "Elixir", ".exs": "Elixir",
+        ".cbl": "COBOL", ".cob": "COBOL", ".pl": "Perl", ".lua": "Lua", ".r": "R", ".m": "Objective-C",
+        ".hs": "Haskell", ".clj": "Clojure", ".erl": "Erlang", ".zig": "Zig"}
 MANIFESTS = {"package.json", "requirements.txt", "pyproject.toml", "Pipfile", "go.mod", "pom.xml", "build.gradle",
              "build.gradle.kts", "Gemfile", "composer.json", "Cargo.toml", "pubspec.yaml", "Package.swift"}
 LOCKFILES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "poetry.lock", "Pipfile.lock",
@@ -58,27 +55,16 @@ PAID_HINTS = {"stripe": "Stripe", "openai": "OpenAI API", "@anthropic-ai/sdk": "
               "twilio": "Twilio", "@sendgrid/": "SendGrid", "aws-sdk": "AWS SDK", "@aws-sdk/": "AWS SDK",
               "@google-cloud/": "Google Cloud", "boto3": "AWS SDK", "resend": "Resend", "algoliasearch": "Algolia",
               "@googlemaps/": "Google Maps", "cloudinary": "Cloudinary"}
-SECRET_PATTERNS = [
-    ("AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    ("Private key block", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY")),
-    ("Stripe live key", re.compile(r"\b[sr]k_live_[0-9a-zA-Z]{16,}\b")),
-    ("Generic sk- API key", re.compile(r"\bsk-[A-Za-z0-9_\-]{20,}\b")),
-    ("GitHub token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}\b")),
-    ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b")),
-    ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9\-]{10,}\b")),
-    ("JWT", re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b")),
-    ("Connection string with password", re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s:/@'\"]+:[^\s@'\"]{3,}@")),
-    ("Hardcoded credential assignment", re.compile(
-        r"(?i)\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key)\b\s*[:=]\s*['\"]([^'\"\s$<{]{8,})['\"]")),
-]
-PLACEHOLDER = re.compile(r"(?i)(example|changeme|change_me|your[_-]|placeholder|xxxx|dummy|test|sample|<.*>|\*\*\*|todo|localhost|password123?$)")
+AI_HINTS = {"openai": "OpenAI", "@anthropic-ai/sdk": "Anthropic", "anthropic": "Anthropic", "langchain": "LangChain",
+            "llama-index": "LlamaIndex", "llama_index": "LlamaIndex", "@google/generative-ai": "Google Gemini",
+            "google-generativeai": "Google Gemini", "ollama": "Ollama", "transformers": "Transformers",
+            "@ai-sdk/": "Vercel AI SDK", "litellm": "LiteLLM", "cohere": "Cohere", "mistralai": "Mistral"}
+UI_FRAMEWORKS = {"Next.js", "React", "Vue", "Nuxt", "Angular", "Svelte", "React Native", "Expo", "Flutter", "Electron"}
+API_FRAMEWORKS = {"Express", "Fastify", "NestJS", "Koa", "Hono", "Django", "Flask", "FastAPI", "Laravel", "Rails",
+                  "Spring Boot", "Gin"}
+MOBILE_FRAMEWORKS = {"React Native", "Expo", "Flutter"}
 TEXT_EXT = set(LANG) | {".json", ".yml", ".yaml", ".toml", ".env", ".ini", ".cfg", ".conf", ".properties", ".tf",
                          ".md", ".txt", ".xml", ".gradle", ".pem", ".key", ""}
-
-
-def mask(s):
-    s = s.strip()
-    return (s[:4] + "…" + s[-2:]) if len(s) > 10 else "…masked…"
 
 
 def read_text(p, limit=400_000):
@@ -105,7 +91,9 @@ def discover(root):
          "database": {"tools": set(), "migrations_dirs": [], "schema_files": [], "sql_files": 0},
          "observability": set(), "paid_services": set(), "env_files": [], "docs": [], "api_specs": [],
          "largest_source_files": [], "secrets": [], "scripts": {}, "has_git": (root / ".git").exists(),
-         "gitignore_covers_env": None, "notes": []}
+         "gitignore_covers_env": None, "notes": [], "commit": git_commit(root),
+         "ai_libraries": set(), "workspace_markers": [], "dockerfile_dirs": set(), "tf_dirs": set(),
+         "dotnet_dirs": set(), "data_markers": []}
     dep_blob = []
     sizes = []
     for dirpath, dirnames, filenames in os.walk(root):
@@ -114,42 +102,52 @@ def discover(root):
         rel_dir = dp.relative_to(root)
         low = dp.name.lower()
         if low in ("migrations", "migrate", "alembic"):
-            d["database"]["migrations_dirs"].append(str(rel_dir))
-        if str(rel_dir).replace("\\", "/") == ".github/workflows":
-            d["ci"] += [str(rel_dir / f) for f in filenames if f.endswith((".yml", ".yaml"))]
+            d["database"]["migrations_dirs"].append(rel_dir.as_posix())
+        if rel_dir.as_posix().replace("\\", "/") == ".github/workflows":
+            d["ci"] += [(rel_dir / f).as_posix() for f in filenames if f.endswith((".yml", ".yaml"))]
         if low == "docs" and len(rel_dir.parts) <= 2:
-            d["docs"].append(str(rel_dir) + "/")
+            d["docs"].append(rel_dir.as_posix() + "/")
         for f in filenames:
             p = dp / f
             rel = p.relative_to(root)
             ext = p.suffix.lower()
             fl = f.lower()
             if f in MANIFESTS or ext == ".csproj":
-                d["manifests"].append(str(rel))
+                d["manifests"].append(rel.as_posix())
                 dep_blob.append(read_text(p).lower())
                 if f == "package.json" and len(rel.parts) == 1:
                     try:
                         d["scripts"] = json.loads(read_text(p)).get("scripts", {})
                     except (ValueError, AttributeError):
                         pass
+            if ext in (".csproj", ".sln"):
+                d["dotnet_dirs"].add(rel_dir.as_posix() or ".")
+            if ext == ".tf":
+                d["tf_dirs"].add(rel_dir.as_posix() or ".")
+            if f in WORKSPACE_MARKERS:
+                d["workspace_markers"].append(rel.as_posix())
+            if fl.startswith("dockerfile"):
+                d["dockerfile_dirs"].add(rel_dir.as_posix() or ".")
+            if fl in ("dbt_project.yml", "airflow.cfg", "dagster.yaml") or ext == ".ipynb":
+                d["data_markers"].append(rel.as_posix())
             if f in LOCKFILES:
-                d["lockfiles"].append(str(rel))
+                d["lockfiles"].append(rel.as_posix())
             if f in CI_FILES:
-                d["ci"].append(str(rel))
+                d["ci"].append(rel.as_posix())
             if fl.startswith("dockerfile") or fl.startswith("docker-compose") or fl in ("compose.yml", "compose.yaml"):
-                d["containers"].append(str(rel))
+                d["containers"].append(rel.as_posix())
             if ext == ".tf" or f in IAC_NAMES:
-                d["iac"].append(str(rel))
+                d["iac"].append(rel.as_posix())
             if fl in ("schema.prisma", "schema.sql", "schema.rb", "structure.sql") or fl.endswith(".dbml"):
-                d["database"]["schema_files"].append(str(rel))
+                d["database"]["schema_files"].append(rel.as_posix())
             if ext == ".sql":
                 d["database"]["sql_files"] += 1
             if fl.startswith(".env"):
-                d["env_files"].append(str(rel))
+                d["env_files"].append(rel.as_posix())
             if fl.startswith("readme") or fl in ("claude.md", "agents.md", "contributing.md", "changelog.md", "security.md"):
-                d["docs"].append(str(rel))
+                d["docs"].append(rel.as_posix())
             if re.search(r"(openapi|swagger)[^/]*\.(ya?ml|json)$", fl):
-                d["api_specs"].append(str(rel))
+                d["api_specs"].append(rel.as_posix())
             if ext in LANG:
                 d["languages"][LANG[ext]] += 1
                 if is_test_file(rel):
@@ -157,7 +155,7 @@ def discover(root):
                 else:
                     d["source_files"] += 1
                     try:
-                        sizes.append((p.stat().st_size, str(rel)))
+                        sizes.append((p.stat().st_size, rel.as_posix()))
                     except OSError:
                         pass
             # secret scan
@@ -178,20 +176,19 @@ def discover(root):
                             continue
                         if is_example and PLACEHOLDER.search(val):
                             continue
-                        d["secrets"].append({"file": str(rel), "line": n, "type": label, "masked": mask(val),
+                        d["secrets"].append({"file": rel.as_posix(), "line": n, "type": label, "masked": mask(val),
                                              "in_example_file": is_example})
                         break
-                # plain KEY=value secrets inside real .env files
                 if fl.startswith(".env") and not is_example:
                     for n, line in enumerate(text.splitlines(), 1):
-                        m = re.match(r"\s*([A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)\s*=\s*(\S{8,})", line)
+                        m = ENV_SECRET.match(line.strip())
                         if m and not PLACEHOLDER.search(m.group(2)):
-                            d["secrets"].append({"file": str(rel), "line": n, "type": f"Env secret {m.group(1)}",
-                                                 "masked": mask(m.group(2).strip('"\'')), "in_example_file": False})
+                            d["secrets"].append({"file": rel.as_posix(), "line": n, "type": f"Env secret {m.group(1)}",
+                                                 "masked": mask(m.group(2)), "in_example_file": False})
     blob = "\n".join(dep_blob)
     for hints, target in ((FRAMEWORK_HINTS, d["frameworks"]), (TEST_HINTS, d["test_frameworks"]),
                           (DB_HINTS, d["database"]["tools"]), (OBS_HINTS, d["observability"]),
-                          (PAID_HINTS, d["paid_services"])):
+                          (PAID_HINTS, d["paid_services"]), (AI_HINTS, d["ai_libraries"])):
         for key, label in hints.items():
             if re.search(r"(?<![a-z0-9_\-])" + re.escape(key), blob):
                 target.add(label)
@@ -227,8 +224,35 @@ def discover(root):
         d["notes"].append(".gitignore does not ignore .env files.")
     if not any(x.lower().startswith("readme") for x in d["docs"]):
         d["notes"].append("No README at any level.")
+    # stacks, adapters and project-type flags
+    d["stacks"] = detect_stacks(root, d["manifests"], d["tf_dirs"], d["dotnet_dirs"])
+    d["unsupported"] = unsupported_languages(d["languages"], d["stacks"])
+    code_stacks = [s for s in d["stacks"] if s["adapter"] != "terraform"]
+    fw = d["frameworks"]
+    d["flags"] = {
+        "is_monorepo": bool(d["workspace_markers"]) or any(s.get("workspaces") for s in d["stacks"])
+        or len({s["path"] for s in code_stacks}) >= 3,
+        "is_microservices": len(d["dockerfile_dirs"]) >= 3,
+        "has_ui": bool(fw & UI_FRAMEWORKS) or any(k in d["languages"] for k in ("HTML", "Vue", "Svelte")),
+        "has_api": bool(fw & API_FRAMEWORKS) or bool(d["api_specs"]),
+        "has_mobile": bool(fw & MOBILE_FRAMEWORKS),
+        "has_database": bool(d["database"]["tools"] or d["database"]["migrations_dirs"]
+                             or d["database"]["schema_files"] or d["database"]["sql_files"]),
+        "has_ai": bool(d["ai_libraries"]),
+        "has_paid_services": bool(d["paid_services"]),
+        "has_ci": bool(d["ci"]),
+        "has_containers": bool(d["containers"]),
+        "has_iac": bool(d["iac"]),
+        "has_data_pipeline": bool(d["data_markers"]),
+        "infrastructure_only": bool(d["iac"]) and not code_stacks and d["source_files"] <= d["languages"].get("Shell", 0),
+        "unsupported_stack": not d["stacks"] and d["source_files"] > 0,
+    }
+    if d["flags"]["unsupported_stack"]:
+        d["notes"].append("No supported stack adapter matched: run-based checks are Not assessed for this project.")
+    for k in ("dockerfile_dirs", "tf_dirs", "dotnet_dirs"):
+        del d[k]
     # make JSON-serialisable
-    for k in ("frameworks", "test_frameworks", "observability", "paid_services"):
+    for k in ("frameworks", "test_frameworks", "observability", "paid_services", "ai_libraries"):
         d[k] = sorted(d[k])
     d["database"]["tools"] = sorted(d["database"]["tools"])
     d["languages"] = dict(d["languages"].most_common())
@@ -239,7 +263,7 @@ def to_markdown(d):
     def lst(xs, n=15):
         xs = list(xs)
         return ", ".join(f"`{x}`" for x in xs[:n]) + (f" … (+{len(xs) - n} more)" if len(xs) > n else "") if xs else "none found"
-    o = ["# Project Discovery", "", f"Root: `{d['root']}`  |  Git repo: {'yes' if d['has_git'] else 'no'}", "",
+    o = ["# Project Discovery", "", f"Root: `{d['root']}`  |  Git repo: {'yes' if d['has_git'] else 'no'}  |  Commit: {d['commit'] or 'n/a'}", "",
          "| Aspect | Found |", "|---|---|",
          f"| Languages (files) | {', '.join(f'{k} {v}' for k, v in d['languages'].items()) or 'none'} |",
          f"| Frameworks | {', '.join(d['frameworks']) or 'none detected'} |",
@@ -258,6 +282,19 @@ def to_markdown(d):
          f"| API specs | {lst(d['api_specs'])} |",
          f"| Docs | {lst(d['docs'])} |",
          f"| Env files | {lst(d['env_files'])} |", ""]
+    o += ["## Project type", "", ", ".join(k for k, v in d["flags"].items() if v) or "no special flags", "",
+          "## Stacks and available checks", ""]
+    if not d["stacks"]:
+        o += ["No supported stack detected.", ""]
+    for s in d["stacks"]:
+        o += [f"### `{s['path']}` — {s['label']}", "",
+              "Tools: " + ", ".join(f"{t} ({'installed' if ok else 'NOT installed here'})"
+                                    for t, ok in s["prerequisites"].items()), ""]
+        o += [f"- {name}: `{' '.join(cmd)}`" if cmd else f"- {name}: not available — {s['unavailable'].get(name, '')}"
+              for name, cmd in s["commands"].items()]
+        o += [f"- Limitation: {x}" for x in s["limitations"]] + [""]
+    if d["unsupported"]:
+        o += ["## Not supported by an adapter", ""] + [f"- {u['language']}: {u['reason']}" for u in d["unsupported"]] + [""]
     if d["scripts"]:
         o += ["## package.json scripts", ""] + [f"- `{k}`: `{v}`" for k, v in list(d["scripts"].items())[:25]] + [""]
     o += ["## Largest source files", ""] + [f"- `{x['file']}` — {x['kb']} KB" for x in d["largest_source_files"]] + [""]
@@ -270,26 +307,3 @@ def to_markdown(d):
         o.append("None matched the built-in patterns (this does not prove there are none).")
     o += ["", "## Gaps noticed", ""] + ([f"- {n}" for n in d["notes"]] or ["- None from the automated pass."]) + [""]
     return "\n".join(o)
-
-
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("project_dir")
-    ap.add_argument("--out", help="directory to write discovery.json and discovery.md")
-    a = ap.parse_args()
-    if not Path(a.project_dir).is_dir():
-        print(f"Not a directory: {a.project_dir}", file=sys.stderr)
-        return 2
-    d = discover(a.project_dir)
-    md = to_markdown(d)
-    if a.out:
-        out = Path(a.out)
-        out.mkdir(parents=True, exist_ok=True)
-        (out / "discovery.json").write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
-        (out / "discovery.md").write_text(md, encoding="utf-8")
-    print(md)
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

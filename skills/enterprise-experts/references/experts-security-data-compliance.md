@@ -14,7 +14,7 @@
 - Residual risk list.
 
 **Checks (with evidence method):**
-- Committed secrets: `discover_project.py` secret scan (Verified); also check git history if allowed (`git log -p -S 'sk_live' --all | head`). Mask values.
+- Committed secrets: the discovery secret scan (Observed; confirm each hit by reading the file); also check git history if allowed (`git log -p -S 'sk_live' --all | head`). Mask values.
 - Dependency vulnerabilities: `npm audit --omit=dev`, `pip-audit`, `osv-scanner`, `govulncheck` (Verified). Report only reachable/production deps as High+.
 - Static analysis: `semgrep --config auto` if installable (Verified), then triage — don't dump raw output.
 - Injection: SQL built by string concatenation, `eval`, shell exec with user input, unsafe deserialization, SSRF (user-controlled URLs fetched server-side), path traversal in file access.

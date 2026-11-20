@@ -1,7 +1,7 @@
 # Final Project Health Report — {Project}
 
 **Prepared by:** AI Engineering Orchestrator / Production Readiness Lead (Enterprise Experts by Sara)
-**Date:** {YYYY-MM-DD}  |  **Mode:** Full / Focused / Quick Health Check  |  **Commit reviewed:** {hash/branch}
+**Date:** {YYYY-MM-DD}  |  **Mode:** Full / Focused / Quick Health Check  |  **Risk profile:** {standard / sensitive / regulated}  |  **Commit reviewed:** {hash/branch}
 
 ## 1. Decision
 
@@ -26,7 +26,7 @@ A target is "Proven" only with Verified evidence. Reading the code and finding i
 
 ## 3. Scorecard
 
-{Paste the table from scorecard.md (output of scripts/scorecard.py): area, status, raw score, final score, cap reason, open Critical/High counts, evidence basis.}
+{Paste the table, blockers and conditions from scorecard.md exactly as `EE score` wrote them. Do not adjust them.}
 
 ## 4. Critical and High issues
 
@@ -63,5 +63,7 @@ A target is "Proven" only with Verified evidence. Reading the code and finding i
 {Companion skills/plugins or access that would raise the evidence level next time.}
 
 ## 10. Method and limits
+
+Intake: {who answered the project questions, and which answers were "unknown"}.
 
 Evidence levels: Verified (ran it), Observed (read it), Inferred (reasoned), Not assessed. Scores are capped when evidence is weak or issues are open (see evidence-and-scoring rules). This report reflects the project at the reviewed commit and the access available on the review date; it is an engineering assessment, not a guarantee, and the compliance section is not legal advice.
