@@ -1,6 +1,6 @@
 # Roadmap to v1.0
 
-Status as of v0.6.1. Enterprise Experts is one reusable skill with a local engine; it is not a hosted product, and no dashboard, server or database is planned. "Tested" means an automated test or a recorded run exists; anything else is stated as not done.
+Status as of v0.6.2. Enterprise Experts is one reusable skill with a local engine; it is not a hosted product, and no dashboard, server or database is planned. "Tested" means an automated test or a recorded run exists; anything else is stated as not done.
 
 ## What v0.5.0 covers
 
@@ -31,6 +31,7 @@ Status as of v0.6.1. Enterprise Experts is one reusable skill with a local engin
 | Supply chain | **Partly**: reproducible skill archive, SBOM and checksums built and verified in CI; release workflow with provenance attestation written; actions pinned by commit; Dependabot | The release workflow has never run (no tag yet). No registry of trusted skills. No vulnerability scan of the Docker image |
 | Releases, updates, rollback | **Upgrade and rollback tested** locally for 0.3.0 → 0.4.0 → 0.3.0 | No tagged release yet |
 | Research and proposals | **Done, tested** (0.6.0): dated sources, proposals that must solve something, cite sources and weigh an alternative, official-source and 90-day staleness rules, approval, verification by a later passing check, `research-log.md` in the delivery package | The engine does not browse; the quality of the research depends on the session's web access and on the model. Not yet evaluated in a model-driven run |
+| Lite edition for plugin directories | **Built** (0.6.2): instructions only, generated from the full skill for the shared guidance, held to the directory rules by tests, passes `claude plugin validate` | Never run in a review. Its scorecards are not checked by any program |
 | Skill evaluation | **Six runs recorded** in `docs/EVALUATION.md`: a with/without comparison, a full 23-expert review of this repository, a healthy project, a fix loop, AI and deployment, screenshots | One run each, by agents of the same model, with supplied answers; one real project (this one); no human judgment of report quality |
 
 ## v1.0 release checklist

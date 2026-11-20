@@ -1,0 +1,18 @@
+{
+  "name": "enterprise-experts-lite",
+  "version": "0.6.2",
+  "description": "Enterprise Experts by Sara (Lite): a 23-expert, evidence-based production-readiness review for any software project, ending in a Go/No-Go report. Instructions only: no scripts, no hooks.",
+  "author": {
+    "name": "Sara Chamas"
+  },
+  "homepage": "https://github.com/saradchamas/Enterprise-Experts-by-Sara",
+  "repository": "https://github.com/saradchamas/Enterprise-Experts-by-Sara",
+  "license": "MIT",
+  "keywords": [
+    "code-review",
+    "production-readiness",
+    "audit",
+    "security",
+    "devops"
+  ]
+}
