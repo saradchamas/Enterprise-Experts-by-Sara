@@ -1,7 +1,7 @@
 # Enterprise Experts - deterministic assessment runner.
 # Contains only the dependency-free engine. It does not contain Claude, the
 # project's toolchains (node, go, ...) or any credentials.
-FROM python:3.13-slim
+FROM python:3.15-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 RUN useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin auditor \
