@@ -186,3 +186,27 @@ def record_level(record, review_dir):
     if kind == "inference":
         return "inferred", None
     return None, f"unknown evidence kind {kind!r}"
+
+
+def add_artifact(review_dir, area, title, command, artifact_path, exit_code=0, commit=None):
+    """Register a file produced by a run of ours (e.g. benchmark results) as command evidence."""
+    _check_area(area)
+    review = Path(review_dir)
+    log = load_log(review)
+    artifact = Path(artifact_path).resolve().relative_to(review.resolve()).as_posix()
+    record = {"id": _next_id(log), "kind": "command", "area": area, "title": title, "command": command,
+              "exit_code": exit_code, "timed_out": False, "started_at": _now(),
+              "runner": f"python {platform.python_version()} on {sys.platform}", "commit": commit,
+              "artifact": artifact, "sha256": sha256_file(review / artifact), "approved_risky_command": False}
+    log["records"].append(record)
+    _save_log(review, log)
+    return record
+
+
+def refresh_hash(review_dir, evidence_id):
+    """Re-hash an artifact that the engine itself has just finished writing."""
+    log = load_log(review_dir)
+    for rec in log["records"]:
+        if rec["id"] == evidence_id:
+            rec["sha256"] = sha256_file(Path(review_dir) / rec["artifact"])
+    _save_log(review_dir, log)

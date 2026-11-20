@@ -40,7 +40,8 @@ def init(review_dir, mode, scope=None):
     if _path(review_dir).exists():
         raise FileExistsError("a review is already in progress here; use 'state show' to resume it")
     Path(review_dir).mkdir(parents=True, exist_ok=True)
-    return _save(review_dir, {"mode": mode, "scope": sorted(areas), "created_at": _now(),
+    return _save(review_dir, {"mode": mode, "scope": sorted(areas), "created_at": _now(), "phase": "assessment", "approvals": [],
+                              "approved_commands": [],
                               "areas": {str(a): {"status": "pending"} for a in sorted(areas)}})
 
 
@@ -82,3 +83,34 @@ def plan(state):
             out["wave"], earlier_open = wave, True
     out["complete"] = not earlier_open
     return out
+
+
+def approve(review_dir, approved_by, findings=(), paths=(), command=None, note=None):
+    """Record a decision the user made. Without a name there is nothing to audit."""
+    if not approved_by or not str(approved_by).strip():
+        raise ValueError("an approval needs --by <who approved it>")
+    if not command and not paths:
+        raise ValueError("an approval needs --paths (files a fix may touch) or --command (one exact command)")
+    state = load(review_dir)
+    entry = {"approved_by": approved_by.strip(), "at": _now(), "note": note}
+    if command:
+        state.setdefault("approved_commands", []).append(dict(entry, command=command))
+    else:
+        state.setdefault("approvals", []).append(dict(entry, findings=list(findings), paths=list(paths)))
+    return _save(review_dir, state)
+
+
+def set_phase(review_dir, phase):
+    if phase not in ("assessment", "remediation"):
+        raise ValueError("phase must be assessment or remediation")
+    state = load(review_dir)
+    if phase == "remediation" and not state.get("approvals"):
+        raise ValueError("cannot enter remediation: no approval has been recorded")
+    state["phase"] = phase
+    return _save(review_dir, state)
+
+
+def close(review_dir):
+    state = load(review_dir)
+    state["closed"] = True
+    return _save(review_dir, state)

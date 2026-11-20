@@ -5,6 +5,10 @@
   intake    --review REVIEW                  validate intake.json and print the risk profile
   state     init|set|show --review REVIEW    track / resume a review
   evidence  run|note|list --review REVIEW    record evidence (run: ... -- <command> [args])
+  approve   --review REVIEW --by NAME ...    record a user approval (paths a fix may touch, or one command)
+  bench     run|compare --review REVIEW      measure before/after and judge the difference against noise
+  graph     <project> --out DIR              dependency graph and database ERD (Mermaid) from the code
+  package   --review REVIEW                  assemble the Final Engineering Delivery folder
   validate  --review REVIEW                  check findings.json + evidence (fail-closed)
   score     --review REVIEW                  scorecard + GO / CONDITIONAL GO / NO-GO
 """
@@ -13,7 +17,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, discovery, evidence, intake, report, scoring, state
+from . import __version__, bench, discovery, evidence, graphs, intake, package, report, scoring, state
 from .areas import AREAS
 
 
@@ -63,10 +67,15 @@ def cmd_state(a):
         st = state.init(a.review, a.mode, a.scope)
     elif a.action == "set":
         st = state.set_status(a.review, a.area, a.status, a.note)
+    elif a.action == "phase":
+        st = state.set_phase(a.review, a.phase)
+    elif a.action == "close":
+        st = state.close(a.review)
     else:
         st = state.load(a.review)
     plan = state.plan(st)
-    _out({"mode": st["mode"], "areas": {f"{k} {AREAS[int(k)]}": v["status"] for k, v in st["areas"].items()},
+    _out({"mode": st["mode"], "phase": st.get("phase", "assessment"), "closed": bool(st.get("closed")),
+          "approvals": len(st.get("approvals", [])), "areas": {f"{k} {AREAS[int(k)]}": v["status"] for k, v in st["areas"].items()},
           "plan": plan})
     return 0
 
@@ -85,6 +94,37 @@ def cmd_evidence(a):
                   f"{r.get('command') or r.get('location') or ''}")
         return 0
     _out(rec)
+    return 0
+
+
+def cmd_approve(a):
+    st = state.approve(a.review, a.by, a.findings or [], a.paths or [], a.exact_command, a.note)
+    _out({"approvals": st.get("approvals", []), "approved_commands": st.get("approved_commands", [])})
+    return 0
+
+
+def cmd_bench(a):
+    if a.action == "run":
+        if not a.label:
+            raise ValueError("bench run needs --label baseline|candidate")
+        res = bench.run(a.review, a.name, a.label, a.command, runs=a.runs, warmup=a.warmup, cwd=a.cwd,
+                        metric_regex=a.metric_regex, unit=a.unit, area=a.area or 3, approved=a.approved)
+        _out({k: res[k] for k in ("name", "label", "command", "metric", "failures", "stats", "evidence")})
+        return 0
+    res = bench.compare(a.review, a.name, a.min_improvement, a.max_regression, a.higher_is_better)
+    print(bench.to_markdown(res))
+    return {"improved": 0, "no_significant_change": 10, "regressed": 20, "not_comparable": 2}[res["verdict"]]
+
+
+def cmd_graph(a):
+    res = graphs.write(a.project, a.out, a.depth)
+    _out({"written": res["written"], "modules_edges": len(res["dependency"]["edges"]),
+          "cycles": res["dependency"]["cycles"], "tables": sorted(res["database"]["tables"])})
+    return 0
+
+
+def cmd_package(a):
+    _out(package.build(a.review))
     return 0
 
 
@@ -123,7 +163,8 @@ def build_parser():
     s.set_defaults(fn=cmd_intake)
 
     s = sub.add_parser("state")
-    s.add_argument("action", choices=["init", "set", "show"])
+    s.add_argument("action", choices=["init", "set", "show", "phase", "close"])
+    s.add_argument("--phase", choices=["assessment", "remediation"])
     s.add_argument("--review", required=True)
     s.add_argument("--mode", choices=["full", "quick", "focused"])
     s.add_argument("--scope", type=int, nargs="+")
@@ -146,6 +187,42 @@ def build_parser():
     s.add_argument("--location")
     s.add_argument("--project")
     s.set_defaults(fn=cmd_evidence)
+
+    s = sub.add_parser("approve", help="record a decision the user made")
+    s.add_argument("--review", required=True)
+    s.add_argument("--by", required=True, help="who approved")
+    s.add_argument("--findings", nargs="*")
+    s.add_argument("--paths", nargs="*", help="files or globs the approved fix may change")
+    s.add_argument("--exact-command", help="one exact risky command the user approved")
+    s.add_argument("--note")
+    s.set_defaults(fn=cmd_approve)
+
+    s = sub.add_parser("bench")
+    s.add_argument("action", choices=["run", "compare"])
+    s.add_argument("--review", required=True)
+    s.add_argument("--name", required=True)
+    s.add_argument("--label", choices=bench.LABELS)
+    s.add_argument("--runs", type=int, default=5)
+    s.add_argument("--warmup", type=int, default=1)
+    s.add_argument("--cwd", default=".")
+    s.add_argument("--area", type=int)
+    s.add_argument("--metric-regex", help="regex with one group capturing the number to compare")
+    s.add_argument("--unit")
+    s.add_argument("--approved", action="store_true")
+    s.add_argument("--min-improvement", type=float, default=10.0)
+    s.add_argument("--max-regression", type=float, default=5.0)
+    s.add_argument("--higher-is-better", action="store_true")
+    s.set_defaults(fn=cmd_bench)
+
+    s = sub.add_parser("graph")
+    s.add_argument("project")
+    s.add_argument("--out", required=True)
+    s.add_argument("--depth", type=int, default=2)
+    s.set_defaults(fn=cmd_graph)
+
+    s = sub.add_parser("package")
+    s.add_argument("--review", required=True)
+    s.set_defaults(fn=cmd_package)
 
     s = sub.add_parser("validate")
     s.add_argument("--review", required=True)
@@ -174,6 +251,9 @@ def main(argv=None):
     a.command = command
     if a.cmd == "evidence" and a.action in ("run", "note") and (a.area is None or not a.title):
         print("evidence run/note need --area and --title", file=sys.stderr)
+        return 2
+    if a.cmd == "state" and a.action == "phase" and not a.phase:
+        print("state phase needs --phase", file=sys.stderr)
         return 2
     if a.cmd == "state" and a.action == "set" and (a.area is None or not a.status):
         print("state set needs --area and --status", file=sys.stderr)
