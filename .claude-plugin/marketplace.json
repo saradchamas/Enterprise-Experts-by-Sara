@@ -1,0 +1,11 @@
+{
+  "name": "enterprise-experts-by-sara",
+  "owner": {"name": "Sara Chamas"},
+  "plugins": [
+    {
+      "name": "enterprise-experts",
+      "source": "./",
+      "description": "A 23-expert, evidence-based production-readiness review for any software project, with a deterministic Go/No-Go decision."
+    }
+  ]
+}

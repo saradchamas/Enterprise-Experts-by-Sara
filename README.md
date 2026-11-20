@@ -39,36 +39,34 @@ Target states: **Architecture Reviewed · Security Assessed · Testing Evidence-
 
 ## How it works
 
-1. **Intake & guardrails** — records what access Claude really has and sets limits (read-only by default; approval required for production, databases, infrastructure, money, compliance, pushing or deleting).
-2. **Discovery** — `scripts/discover_project.py` inventories the stack, tests, CI, containers, IaC, database, observability, docs, and scans for committed secrets (masked).
-3. **Expert assessment in waves** — Foundation → Protection → Runtime → Delivery → Synthesis. Every finding carries an evidence level: *Verified* (ran it), *Observed* (read it), *Inferred*, or *Not assessed*.
-4. **Remediation (with approval only)** — fixes on a branch, one owner per change, re-verified before anything is called "fixed".
-5. **Final report** — `scripts/scorecard.py` applies score caps and the Go/No-Go rules deterministically, so the decision can't be talked up.
+1. **Discover, then ask.** The engine inventories the project (stacks, checks available, CI, containers, database, secrets scan). Claude then asks you the intake questions that fit this project: what it does, what data it holds, whether it moves money, what may be run and changed. The answers set a risk profile (standard, sensitive, regulated) and the release gates.
+2. **Baseline.** Build, tests, lint, type-check and dependency audit are run where the project has them, and their output is captured as evidence.
+3. **Expert assessment in waves** — Foundation → Protection → Runtime → Delivery → Synthesis. Evidence is recorded, not declared: *Verified* means a command ran and its output was captured; *Observed* means something was read at a cited location; *Inferred* is reasoning and can never support a pass.
+4. **Remediation, with approval only.** Fixes go on a branch, one owner per change, and count as fixed only after a re-check ran.
+5. **Decision.** The engine validates the whole review and returns GO, CONDITIONAL GO or NO-GO. It is fail-closed: a missing area, missing evidence or malformed input makes the review invalid, and an invalid review is NO-GO.
 
-Three modes: **Full Review** (all 23), **Focused Review** (the areas you name), **Quick Health Check** (the 8 core areas).
+Three modes: **Full** (all 23 areas), **Quick** (8 areas), **Focused** (the areas you name; its decision covers that scope only).
 
-## Repository layout
+## Status: v0.2.0, not yet v1.0
+
+What is implemented and tested, and what is not, is tracked honestly in [docs/ROADMAP.md](docs/ROADMAP.md). In short: the decision engine, intake, evidence recording, stack detection, Docker runner and CI are implemented and covered by 76 automated tests. The 23-expert AI workflow has not yet been evaluated end to end on real projects, and several v1.0 items (remediation tooling, PDF/Excel export, update manager, dashboard) are not built.
+
+## Install
+
+**As a Claude Code plugin** (skill + read-only reviewer subagent):
 
 ```
-enterprise-experts/
-├── SKILL.md                         # the Orchestrator's workflow
-├── references/
-│   ├── evidence-and-scoring.md      # evidence levels, severities, score caps, Go/No-Go
-│   ├── experts-architecture-design.md        # experts 1, 4, 6, 15, 16
-│   ├── experts-security-data-compliance.md   # experts 2, 14, 19
-│   ├── experts-performance-reliability.md    # experts 3, 5, 7, 8, 18
-│   ├── experts-quality-delivery-infra.md     # experts 9, 10, 11, 12
-│   ├── experts-product-leadership.md         # experts 13, 17, 20, 21, 22, 23
-│   └── companion-skills.md          # 47 optional skills/plugins mapped to the experts
-├── assets/                          # deliverable + final report templates
-└── scripts/
-    ├── discover_project.py          # project inventory + secret scan
-    └── scorecard.py                 # score caps + Go/No-Go decision
+/plugin marketplace add saradchamas/Enterprise-Experts-by-Sara
+/plugin install enterprise-experts@enterprise-experts-by-sara
 ```
 
-## Using it
+**As a standalone skill:** copy `skills/enterprise-experts/` into your skills folder, or upload the packaged `.skill` file in Claude.
 
-Install the `enterprise-experts` folder as a skill, open your project, and say for example:
+Details, uninstall and verification: [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
+## Use
+
+Open your project and say, for example:
 
 - "Run Enterprise Experts on this project — full review."
 - "Is this project production-ready? Quick health check."
@@ -77,7 +75,31 @@ Install the `enterprise-experts` folder as a skill, open your project, and say f
 
 Output is written to `enterprise-review/<date>/` inside the project.
 
+The engine also runs on its own, without Claude, for the deterministic parts:
+
+```bash
+python skills/enterprise-experts/scripts/enterprise_experts.py discover /path/to/project --out review
+python skills/enterprise-experts/scripts/enterprise_experts.py score --review review
+PROJECT_DIR=/path/to/project docker compose run --rm audit      # same, isolated
+```
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [docs/INSTALLATION.md](docs/INSTALLATION.md) | Install, verify, uninstall |
+| [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Review workflow, CLI reference, files and exit codes |
+| [docs/DOCKER.md](docs/DOCKER.md) | The isolated runner: what it does and does not do |
+| [docs/SECURITY.md](docs/SECURITY.md) | Permissions, isolation, secrets, approvals |
+| [Scoring specification](skills/enterprise-experts/references/evidence-and-scoring.md) | Evidence levels, schema, caps, gates |
+| [Intake questions](skills/enterprise-experts/references/intake-questions.md) | What is asked and what each answer changes |
+| [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) | Architecture, tests, adding adapters, questions and experts |
+| [docs/UPDATES.md](docs/UPDATES.md) | Versioning, upgrading, rolling back |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Gap analysis, v1.0 checklist, known limitations |
+| [CHANGELOG.md](CHANGELOG.md) | Changes per release |
+
 ## Notes
 
-- The companion skills listed in `references/companion-skills.md` are optional boosters. Community skills vary in quality; inspect source code and permissions before installing any.
+- The companion skills listed in `skills/enterprise-experts/references/companion-skills.md` are optional. Community skills vary in quality; inspect source code and permissions before installing any.
 - The compliance deliverable is a gap assessment for a qualified person to review, not legal advice.
+- No licence file has been added yet; until the owner chooses one, all rights are reserved.

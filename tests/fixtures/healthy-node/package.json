@@ -1,0 +1,3 @@
+{"name":"healthy-node","version":"1.0.0","private":true,
+ "scripts":{"test":"node --test","lint":"node --check src/index.js","build":"node --check src/index.js"},
+ "dependencies":{}}

@@ -1,0 +1,27 @@
+# Run the deterministic parts of a review in an isolated container.
+#
+#   PROJECT_DIR=/path/to/project docker compose run --rm audit
+#   docker compose run --rm audit score --review /reports
+#
+# The project is mounted read-only; only ./reports (REPORTS_DIR) is writable.
+services:
+  audit:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: enterprise-experts:0.2.0
+    volumes:
+      - ${PROJECT_DIR:-.}:/project:ro
+      - ${REPORTS_DIR:-./reports}:/reports
+    user: "${AUDIT_UID:-10001}:${AUDIT_GID:-10001}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    network_mode: none
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
