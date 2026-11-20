@@ -53,7 +53,13 @@ def to_html(res):
         "<tr><td>{}</td><td>{}{}</td><td>{}</td><td>{}</td><td><b>{}</b></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
             r["id"], e(r["name"]), " ★" if r["core"] else "", e(r["status"]),
             "—" if r["score"] is None else r["score"], "—" if r["final"] is None else r["final"],
-            e(str(r["caps"])), r["critical"], r["high"], e(r["basis"])) for r in res["rows"])
+            e(str(r["caps"])), r["critical"], r["high"], e(r.get("basis_detail") or r["basis"])) for r in res["rows"])
+    commits = ""
+    if res.get("commits"):
+        commits = "<p>Evidence was recorded at: " + ", ".join(
+            f"commit <code>{e(c)}</code> ({n} records)" for c, n in sorted(res["commits"].items(), key=lambda x: -x[1])) + (
+            ". More than one commit: the review spans a change, so check which records each conclusion cites.</p>"
+            if len(res["commits"]) > 1 else ".</p>")
 
     def block(title, items):
         return f"<h2>{title}</h2><ul>" + "".join(f"<li>{e(i)}</li>" for i in items) + "</ul>" if items else ""
@@ -64,6 +70,7 @@ th{{background:#f6f8fa}}.d{{display:inline-block;padding:.4rem 1rem;border-radiu
 <body><h1>Scorecard — {e(str(res.get('project')))}</h1>
 <p><span class="d">{e(_title(res))}</span> &nbsp; Overall: <b>{res['overall'] if res['overall'] is not None else 'n/a'}/100</b>
 &nbsp;|&nbsp; {e(str(res.get('review_date')))} &nbsp;|&nbsp; mode: {e(str(res.get('mode')))} &nbsp;|&nbsp; risk profile: {e(str(res.get('risk_profile')))}</p>
+{commits}
 {block('Validation errors', res['errors'])}
 {'<table><tr><th>#</th><th>Area</th><th>Status</th><th>Expert score</th><th>Final</th><th>Cap / reason</th><th>Unresolved Critical</th><th>Open High</th><th>Evidence basis</th></tr>' + rows + '</table><p>★ core area for this risk profile</p>' if res['rows'] else ''}
 {block('How to read this result', res.get('notes', []))}{block('Blockers', res['blockers'])}{block('Conditions', res['conditions'])}</body></html>"""

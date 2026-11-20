@@ -247,3 +247,4 @@ class CleanSearches(unittest.TestCase):
             self.assertEqual(res["rows"][0]["basis"], "Verified")
             self.assertEqual(res["rows"][0]["basis_detail"], "Verified (1 of 2 checks were run)")
             self.assertIn("1 of 2 checks were run", report.to_markdown(res))
+            self.assertIn("1 of 2 checks were run", report.to_html(res))

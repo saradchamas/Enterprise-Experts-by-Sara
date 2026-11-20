@@ -21,6 +21,7 @@ Driven by a full 23-expert review of an independent real project (`docs/EVALUATI
 - The scorecard shows, per area, how many checks rest on something that was run, and the commits its evidence was recorded at.
 - Proposal status `deferred`, with a reason; the research log shows reasons for deferred and rejected proposals.
 - `evidence note --also` shares a note when it is written.
+- The HTML scorecard shows the same two things as the Markdown one (checks run per area, commits).
 - Intake answers `run_project_tests` and `read_only_tools_only` for what may be executed.
 
 ### Changed
