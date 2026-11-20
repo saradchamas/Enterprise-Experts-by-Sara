@@ -39,6 +39,37 @@ Target states: **Architecture Reviewed · Security Assessed · Testing Evidence-
 
 ## How it works
 
+```mermaid
+flowchart TD
+    U([You: "Run Enterprise Experts on this project"]) --> D[Discover the project<br/>stacks, checks, capability matrix]
+    D --> Q[Ask you the intake questions<br/>risk profile and permissions]
+    Q --> B[Baseline<br/>build, tests, lint, audit]
+    B --> W1
+
+    subgraph EXPERTS [23 experts, in five waves]
+        direction LR
+        W1[Foundation<br/>Architecture, Business Logic,<br/>Database, APIs] --> W2[Protection<br/>Security, Data Governance,<br/>Compliance]
+        W2 --> W3[Runtime<br/>Performance, Scalability, Reliability,<br/>Observability, DR, Incidents]
+        W3 --> W4[Delivery<br/>QA, DevOps, Infrastructure,<br/>Cost, UI/UX, Analytics]
+        W4 --> W5[Synthesis<br/>Documentation, Tech Leadership,<br/>Strategy, Delivery]
+    end
+
+    W5 --> P{Fix anything?}
+    P -- "you approve a plan" --> R[Remediation on a branch<br/>measure before and after,<br/>re-check, independent review]
+    P -- "assess only" --> S
+    R --> S[Engine validates and decides]
+    S --> O([Final report and delivery package<br/>GO / CONDITIONAL GO / NO-GO])
+
+    E[(Evidence log<br/>every command run and file read)]
+    B -. records .-> E
+    EXPERTS -. records .-> E
+    R -. records .-> E
+    E -. "decision is computed from this" .-> S
+```
+
+The decision at the end is made by the engine from the recorded evidence, not by the model's opinion.
+
+
 1. **Discover, then ask.** The engine inventories the project (stacks, checks available, CI, containers, database, secrets scan). Claude then asks you the intake questions that fit this project: what it does, what data it holds, whether it moves money, what may be run and changed. The answers set a risk profile (standard, sensitive, regulated) and the release gates.
 2. **Baseline.** Build, tests, lint, type-check and dependency audit are run where the project has them, and their output is captured as evidence.
 3. **Expert assessment in waves** — Foundation → Protection → Runtime → Delivery → Synthesis. Evidence is recorded, not declared: *Verified* means a command ran and its output was captured; *Observed* means something was read at a cited location; *Inferred* is reasoning and can never support a pass.
@@ -46,6 +77,20 @@ Target states: **Architecture Reviewed · Security Assessed · Testing Evidence-
 5. **Decision.** The engine validates the whole review and returns GO, CONDITIONAL GO or NO-GO. It is fail-closed: a missing area, missing evidence or malformed input makes the review invalid, and an invalid review is NO-GO.
 
 Three modes: **Full** (all 23 areas), **Quick** (8 areas), **Focused** (the areas you name; its decision covers that scope only).
+
+## What the results look like
+
+**The scorecard.** A real one: the skill's full 23-expert review of this repository at v0.4.0, which ended CONDITIONAL GO at 73/100 and found five High issues in the skill itself (all fixed in v0.5.0). It is a screenshot of the HTML scorecard the engine wrote; the [full image](docs/images/scorecard-self-review.png) also shows the conditions.
+
+![Scorecard of the skill's review of its own repository: CONDITIONAL GO, 73 out of 100, with a score, status and evidence basis for each of the 23 areas](docs/images/scorecard-self-review-top.png)
+
+**Visual regression.** A screenshot is compared with the baseline you approved, and the engine draws where they differ. These three images are real engine input and output, from a small test page whose heading was changed:
+
+| Approved baseline | New capture | Difference (2.1% of pixels, in red) |
+|---|---|---|
+| ![Baseline screenshot of a test page with the heading Hello](docs/images/visual-baseline.png) | ![New screenshot of the same page with the heading changed](docs/images/visual-current.png) | ![Difference image with the changed heading area marked in red](docs/images/visual-difference.png) |
+
+Each review also produces the expert reports, an evidence log with the captured output of every check, `report.xlsx`, `report.pdf` and a delivery folder. More about what the runs so far did and did not show is in [docs/EVALUATION.md](docs/EVALUATION.md).
 
 ## Status: v0.5.1, not yet v1.0
 
